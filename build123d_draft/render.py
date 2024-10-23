@@ -71,8 +71,8 @@ class ImageExporter:
         drawer.ShadingAspect().SetColor(ocp_color(self.default_color))
 
     def show(self, shape, clip=None, hatch=True, hscale=0.05, alpha=None,
-             edges=None, line_width=None, clip_outline=True):
-        shape_color = getattr(shape, 'color', None)
+             edges=None, line_width=None, clip_outline=True, color=None):
+        shape_color = color or getattr(shape, 'color', None)
 
         prs = OCP.AIS.AIS_Shape(shape.wrapped)
         if alpha is not None:
@@ -112,13 +112,13 @@ class ImageExporter:
 
         self.ctx.Display(prs, OCP.AIS.AIS_Shaded, -1, False)
 
-    def setup_view(self, start=None, rotz=None, roty=None, zoom=None):
+    def setup_view(self, start=None, rotz=None, roty=None, zoom=None, fit=0.01, proj=None):
         if not start:
             start = (0, 0, 0)
 
         self.view.SetAxis(*start, 0, 0, -1)
         self.view.SetAt(*start)
-        self.view.SetProj(OCP.V3d.V3d_TypeOfOrientation_Zup_AxoRight)
+        self.view.SetProj(proj or OCP.V3d.V3d_TypeOfOrientation_Zup_AxoRight)
 
         if rotz is not None:
             self.view.Rotate(rotz*dpr)
@@ -129,7 +129,7 @@ class ImageExporter:
         if zoom is not None:
             self.view.SetZoom(zoom)
         else:
-            self.view.FitAll(0.01, False)
+            self.view.FitAll(fit, False)
 
     def export(self):
         image = OCP.Image.Image_AlienPixMap()

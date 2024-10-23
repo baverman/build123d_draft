@@ -36,6 +36,10 @@ names and make models fully parametric.
 [build123d]: https://github.com/gumyr/build123d
 [ttt]: https://tootalltoby.com/
 
+Documentation:
+
+* [`build_line` tutorial](./tutorial.md)
+
 Here are examples showcasing `build123d_draft` in action:
 
 
@@ -172,7 +176,7 @@ part = part + c - c.new(d=0.625)
 
 ```python
 l1 = build_line((-133/2, 12)).append(
-    op_line(angle=19, tangent=(1, 0), until=XX(0)),  # TODO: make axis as tangent
+    op_line(angle=19, tangent=(1, 0), until=XX(0)),
     op_line(angle=-19, tangent=(1, 0), until=XX(133/2)),
     op_fillet(33), op_close(mirror=Axis.X)
 )
@@ -181,7 +185,7 @@ p1 -= mirror_add(Pos(99/2, Z=20) * cbore(12, 5, 6, 20), Plane.YZ)
 
 l2 = build_line(Y(33)).append(
     op_arc(33, -180),
-    op_trim(Axis.Y.offset(44/2, -55-15), add=True, idx=0), # TODO: select nearest point
+    op_trim(Axis.Y.offset(44/2, -55-15), add=True),
     op_fillet(30), op_close(mirror=Axis.Y)
 )
 p2 = l2.extrude(41)

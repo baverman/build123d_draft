@@ -268,6 +268,8 @@ def op_line(lb, length=None, angle=None, dir=None, start=None, to=None,
         else:
             tangent = lb.to_direction(tangent)
         dir = tangent.rot(angle or 0, make_axis(lb.plane))
+    else:
+        dir = lb.to_direction(dir)
 
     if length is not None:
         return lb.add_shape(Line(start, start + dir * length))

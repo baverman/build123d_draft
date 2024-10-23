@@ -36,4 +36,8 @@ names and make models fully parametric.
 [build123d]: https://github.com/gumyr/build123d
 [ttt]: https://tootalltoby.com/
 
+Documentation:
+
+* [`build_line` tutorial](./tutorial.md)
+
 Here are examples showcasing `build123d_draft` in action:
