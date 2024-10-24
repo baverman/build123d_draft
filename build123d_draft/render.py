@@ -21,6 +21,14 @@ def ocp_color(r, g=None, b=None):
     return OCP.Quantity.Quantity_Color(r, g, b, OCP.Quantity.Quantity_TypeOfColor.Quantity_TOC_RGB)
 
 
+PROJECTIONS = {
+    'Z': OCP.V3d.V3d_Zpos,
+    '-Z': OCP.V3d.V3d_Zneg,
+    'Y': OCP.V3d.V3d_Ypos,
+    '-Y': OCP.V3d.V3d_Yneg,
+}
+
+
 @functools.lru_cache(1)
 def render_context(size, bg):
     disp = OCP.Aspect.Aspect_DisplayConnection()
@@ -118,7 +126,7 @@ class ImageExporter:
 
         self.view.SetAxis(*start, 0, 0, -1)
         self.view.SetAt(*start)
-        self.view.SetProj(proj or OCP.V3d.V3d_TypeOfOrientation_Zup_AxoRight)
+        self.view.SetProj(PROJECTIONS.get(proj, proj or OCP.V3d.V3d_TypeOfOrientation_Zup_AxoRight))
 
         if rotz is not None:
             self.view.Rotate(rotz*dpr)

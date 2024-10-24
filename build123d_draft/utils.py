@@ -1,3 +1,4 @@
+import sys
 import OCP
 from OCP.BRep import BRep_Tool
 from build123d.geometry import Vector, Pos
@@ -125,6 +126,47 @@ def _defined_all(*args):
     return all(it is not None for it in args)
 
 
+def _iter_args(col):
+    for it in col:
+        if type(it) is str:
+            yield it.lstrip('+-!')
+        elif it is None:
+            pass
+        else:
+            yield from _iter_args(it)
+
+
+def _eval_args(vals, case):
+    tcase = type(case)
+    if tcase is str:
+        if case[0] == '+':
+            v = vals[case[1:]]
+            return v is not False and v is not None
+        elif case[0] == '!':
+            return vals[case[1:]] is False
+        elif case[0] == '-':
+            return vals[case[1:]] is None
+        return vals[case] is not None
+    elif tcase is list:
+        return all(_eval_args(vals, it) for it in case)
+    elif tcase is tuple:
+        mc = sum(_eval_args(vals, it) for it in case)
+        if case[0] is None:
+            return mc <= 1
+        return mc == 1
+    elif case is None:
+        return False
+    return False
+
+
+def assert_args(vals, *cases):
+    matched_count = sum(_eval_args(vals, it) for it in cases)
+    if matched_count == 1:
+        return
+
+    assert False, f'matched_cases={matched_count}: ' + str(cases)
+
+
 class PPos(Pos):
     def __init__(self, X=None, Y=None, Z=None):
         self._initial = (X, Y, Z)
@@ -138,3 +180,8 @@ class PPos(Pos):
             r[idx] = iv if iv is not None else vv
 
         return Vector(*r)
+
+
+def debug(*args, **kwargs):
+    kwargs['file'] = sys.stderr
+    return print(*args, **kwargs)

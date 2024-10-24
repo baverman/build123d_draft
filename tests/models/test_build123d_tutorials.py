@@ -52,7 +52,7 @@ def test_ppack_01_01():
 def test_ppack_01_02():
     l = build_line(X(49/2), Plane.XZ).append(
         Y(40),
-        op_ellipse_arc(20, 8, 0, 90),
+        op_ellipse_arc(20, 8, 90),
         op_close(Axis.Y)
     )
     base = l.revolvey()

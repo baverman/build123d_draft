@@ -7,8 +7,9 @@ from build123d.objects_curve import Line, IntersectingLine, BaseLineObject, Tang
 from build123d.operations_sketch import make_face
 from build123d.operations_generic import mirror, sweep, fillet, chamfer
 from build123d.operations_part import extrude, revolve
+from build123d.build_enums import AngularDirection
 
-from .utils import FakeBuilder, PPos, _defined, _defined_all, param_on_point, trim_wire
+from .utils import FakeBuilder, PPos, _defined, _defined_all, param_on_point, trim_wire, assert_args, debug
 from .tools import make_axis, intersection
 
 b123_mirror = mirror
@@ -257,7 +258,13 @@ def op_start(lb, start=None, tangent=None):
 def op_line(lb, length=None, angle=None, dir=None, start=None, to=None,
             until=None, tangent=None):
     if lb is None:
-        assert _defined(to, length, until)
+        assert_args(
+            locals(),
+            ['dir', ('length', 'until')],
+            ['angle', ('length', 'until')],
+            ['to', (None, 'length', 'until')],
+            [('length', 'until'), '-dir', '-angle', '-to'],
+        )
         return
 
     reset_tangent = False
@@ -267,18 +274,21 @@ def op_line(lb, length=None, angle=None, dir=None, start=None, to=None,
         reset_tangent = True
         start = lb.to_vector(start)
 
-    if to is not None:
+    if to is not None and not _defined(length, until):
         return lb.add_shape(Line(start, lb.to_vector(to, start)))
 
     if dir is None:
-        if tangent is None:
-            if reset_tangent:
-                tangent = lb.plane.x_dir
-            else:
-                tangent = lb.tangent()
+        if to is not None:
+            dir = lb.to_vector(to, start) - start
         else:
-            tangent = lb.to_direction(tangent)
-        dir = tangent.rot(angle or 0, make_axis(lb.plane))
+            if tangent is None:
+                if reset_tangent:
+                    tangent = lb.plane.x_dir
+                else:
+                    tangent = lb.tangent()
+            else:
+                tangent = lb.to_direction(tangent)
+            dir = tangent.rot(angle or 0, make_axis(lb.plane))
     else:
         dir = lb.to_direction(dir)
 
@@ -329,6 +339,13 @@ def op_extend(lb, start=None, end=None):
 def op_arc(lb, radius=None, size=None, to=None, tangent=True,
            short=True, center=None, start_angle=None, start=None):
     if lb is None:
+        assert_args(
+            locals(),
+            ['radius', 'size', '+tangent', '-center', '-to'],
+            ['to', '+tangent', '-center', '-radius', '-size'],
+            ['to', 'radius', '!tangent', '-center'],
+            ['center', 'radius', 'size', (None, 'start_angle'), '-to'],
+        )
         return
 
     if start is None:
@@ -343,33 +360,48 @@ def op_arc(lb, radius=None, size=None, to=None, tangent=True,
 
     with lb._builder:
         if _defined_all(radius, size) and center is None:
+            # JernArc, reimplemented
             ax = make_axis(lb.plane)
             n = tangent.rotate(ax, math.copysign(90, size))
             c = e + n.normalized() * radius
             ep = c + (e - c).rotate(ax, size)
             return lb.add_shape(BaseLineObject(Edge.make_tangent_arc(e, tangent, ep)))
         elif _defined(to) and tangent:
-            return lb.add_shape(TangentArc(e, lb.to_vector(to), tangent=tangent))
+            return lb.add_shape(TangentArc(e, lb.to_vector(to, e), tangent=tangent))
         elif _defined_all(to, radius) and not tangent:
-            return lb.add_shape(RadiusArc(e, lb.to_vector(to), radius, short_sagitta=short))
-        elif _defined_all(center, radius):
+            return lb.add_shape(RadiusArc(e, lb.to_vector(to, e), radius, short_sagitta=short))
+        elif _defined_all(center, radius, size):
             start_angle = start_angle or 0
             if center is True:
                 center = lb.e
             else:
-                center = lb.to_vector(center)
+                center = lb.to_vector(center, e)
             return lb.add_shape(CenterArc(center, radius, start_angle, size))
+
     assert False
 
 
 @build_line_op
-def op_ellipse_arc(lb, r1, r2, start, end):
+def op_ellipse_arc(lb, r1, r2, size, start_angle=0, start=None, tangent=True):
     if lb is None:
         return
 
-    edge = Edge.make_ellipse(r1, r2, lb.plane, start, end)
+    if start is None:
+        e = lb.e
+    else:
+        e = lb.to_vector(start)
+
+    if tangent is True:
+        et = lb.tangent()
+    else:
+        et = lb.to_direction(tangent)
+
+    edge = Edge.make_ellipse(r1, r2, lb.plane, start_angle, start_angle+size)
     s = BaseLineObject(edge)
-    return lb.add_shape(Pos(lb.e - s @ 0) * s)
+
+    ra = (s % 0).get_signed_angle(et, lb.plane.z_dir)
+    s = s.rotate(Axis(s @ 0, lb.plane.z_dir), ra)
+    return lb.add_shape(Pos(e - s @ 0) * s)
 
 
 @build_line_op
