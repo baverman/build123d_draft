@@ -1,6 +1,6 @@
 import functools
 from build123d.geometry import Vector, Pos, Location, Plane, Axis, RotationLike
-from build123d.topology import Wire, Edge, ShapeList, tuplify, new_edges, Part
+from build123d.topology import Wire, Edge, ShapeList, tuplify, new_edges, Part, Shape
 from build123d.operations_generic import mirror, split
 from build123d.operations_part import extrude
 from build123d.objects_sketch import Rectangle, Circle, SlotCenterPoint
@@ -56,12 +56,22 @@ def intersections(shape, other, tolerance=0):
     return ShapeList(r)
 
 
+def dist(a, b):
+    if isinstance(a, Shape):
+        return a.distance_to(b)
+    elif isinstance(b, Shape):
+        return b.distance_to(a)
+    else:
+        return (b - a).length
+
+
 def intersection(shape, other, near_by=None, tolerance=0):
     # TODO: near_by could be declarative like 'end', 'start', 'center'
     # or a param coordinate to specify point on shape instead of fixing
     # it to the end as now
     r = intersections(shape, other, tolerance=tolerance)
-    points = r.sort_by_distance(near_by or shape.e)
+    ref = near_by or shape.e
+    points = sorted(r, key=lambda x: dist(x, ref))
     return points[0]
 
 
@@ -116,7 +126,7 @@ class Cylinder(Cylinder_orig):
         elif r is not None:
             height = radius
             radius = r
-        super().__init__(radius, height, arc_size, rotation, align, mode)
+        super().__init__(radius, height, arc_size=arc_size, rotation=rotation, align=align, mode=mode)
 
     def new(self, radius=None, height=None, d=None, r=None):
         if d is not None:
@@ -142,7 +152,7 @@ class Circle(Circle_orig):
     ):
         if d is not None:
             radius = d/2
-        super().__init__(radius, align, mode)
+        super().__init__(radius, align=align, mode=mode)
 
     def cylinder(self, height, d=None, r=None, align=Align.MIN):
         radius = self.radius

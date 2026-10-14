@@ -10,7 +10,8 @@ def reversed_wire(wire):
     elist = []
     for e in wire.edges():
         elist.append(e.reversed())
-    return Wire(reversed(elist))
+    w = Wire(reversed(elist))
+    return w
 
 
 def edge_curve(edge):
@@ -20,13 +21,7 @@ def edge_curve(edge):
 
 
 def param_on_point(wire, point, normalized=True):
-    is_reversed = wire.wrapped.Orientation() == OCP.TopAbs.TopAbs_Orientation.TopAbs_REVERSED
     edges = wire.edges()
-    si = 0
-    if is_reversed:
-        edges = reversed(edges)
-        si = 1
-
     U = 0
     candidates = []
     pt = Vector(point).to_pnt()
@@ -35,7 +30,7 @@ def param_on_point(wire, point, normalized=True):
         poc = OCP.GeomAPI.GeomAPI_ProjectPointOnCurve(pt, c)
         p = poc.LowerDistanceParameter()
         if pr[0] <= p <= pr[1]:
-            candidates.append((poc.LowerDistance(), U + abs(pr[si] - p)))
+            candidates.append((poc.LowerDistance(), U + abs(pr[int(not e.is_forward)] - p)))
         U += abs(pr[0] - pr[1])
 
     if not candidates:
@@ -49,12 +44,7 @@ def param_on_point(wire, point, normalized=True):
 
 
 def trim_wire(wire, start=0, end=1):
-    is_reversed = wire.wrapped.Orientation() == OCP.TopAbs.TopAbs_Orientation.TopAbs_REVERSED
-
     edges = wire.edges()
-    if is_reversed:
-        edges.reverse()
-
     curves = [(it, edge_curve(it)) for it in edges]
     U = sum(abs(pr[0] - pr[1]) for _, (_, pr) in curves)
     start *= U
@@ -63,6 +53,7 @@ def trim_wire(wire, start=0, end=1):
     nedges = []
     u2 = 0
     for e, (c, pr) in curves:
+        is_reversed = not e.is_forward
         u1 = u2
         u2 = (u1 + abs(pr[0] - pr[1]))
         if u2 < start or u1 > end:
@@ -92,21 +83,19 @@ def trim_wire(wire, start=0, end=1):
 
         tc = OCP.Geom.Geom_TrimmedCurve(c, t1, t2)
         nedges.append(OCP.BRepBuilderAPI.BRepBuilderAPI_MakeEdge(tc).Edge())
+        if is_reversed:
+            nedges[-1].Reverse()
 
     assert nedges
 
-    if is_reversed:
-        nedges.reverse()
-
     rv = Wire([Edge(it) for it in nedges])
-
-    if is_reversed:
-        rv.wrapped.Reverse()
 
     return rv
 
 
 class FakeBuilder(Builder):
+    _tag = 'BuildLine'
+
     def _add_to_pending(self, *objects, face_plane = None):
         return NotImplementedError  # pragma: no cover
 
@@ -169,6 +158,7 @@ def assert_args(vals, *cases):
 
 class PPos(Pos):
     def __init__(self, X=None, Y=None, Z=None):
+        super().__init__()
         self._initial = (X, Y, Z)
 
     def combine_abs(self, v):
@@ -176,7 +166,7 @@ class PPos(Pos):
             v = Vector(0, 0, 0)
 
         r = [0, 0, 0]
-        for idx, (iv, vv) in enumerate(zip(self._initial, v.to_tuple())):
+        for idx, (iv, vv) in enumerate(zip(self._initial, v)):
             r[idx] = iv if iv is not None else vv
 
         return Vector(*r)

@@ -142,7 +142,7 @@ def test_24_05_LB2_chamber():
 
     loch = Z(0.75)
     rib = loch * Box(5.5/2, 0.25, 3.5-0.75*2, align=A.wd)
-    part += bowl & PolarLocations(0, 3, 60) * rib
+    part += PolarLocations(0, 3, 60) * (bowl & rib)
 
     part += loch * Cylinder(3.5-0.5-0.75, d=1.25, align=A.d)
     part -= Cylinder(3.5-0.5, d=0.75, align=A.d)
@@ -290,7 +290,7 @@ def test_24_04_LB3_end_base():
         op_close(Axis.X)
     )
     part = l.extrude(-50)
-    part = split(part, Plane.XZ.move(Pos(188, 50)).rotated((0, 0, -45)))
+    part = split(part, Plane.XZ.moved(Pos(188, 0, -50)).rotated((0, 0, -45)))
 
     l = build_line(plane=Plane.XZ.offset(-50)).append(
         op_line(start=(22, 88), to=(188, 22)),

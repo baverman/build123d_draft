@@ -74,4 +74,4 @@ def test_24WC_12_tube_plug():
 
 
 if __name__ == '__main__':
-    main_yacv()
+    main_ocp_vscode()

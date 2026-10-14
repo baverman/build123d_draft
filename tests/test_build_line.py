@@ -11,7 +11,10 @@ def test_op_close_axis_transformation():
         X(10), Y(10), op_close(Axis.Y)
     )
     v = [Vector(it) for it in l.wire().vertices()]
-    assert v == [Vector(it) for it in [(0, 5, 0), (10, 5, 0), (10, 5, 10), (0, 5, 10)]]
+    v = [l.s]
+    for it in l:
+        v.append(it.e)
+    assert v == [Vector(it) for it in [(0, 5, 0), (10, 5, 0), (10, 5, 10), (0, 5, 10), (0, 5, 0)]]
 
 
 def test_localize_direction_vector():

@@ -3,13 +3,13 @@ from itertools import chain as it_chain
 
 from build123d.geometry import Plane, Axis, Pos, Vector, Location
 from build123d.topology import Shape, ShapeList, Wire, Edge, Vertex
-from build123d.objects_curve import Line, IntersectingLine, BaseLineObject, TangentArc, RadiusArc, CenterArc
+from build123d.objects_curve import Line, IntersectingLine, TangentArc, RadiusArc, CenterArc, BaseEdgeObject
 from build123d.operations_sketch import make_face
-from build123d.operations_generic import mirror, sweep, fillet, chamfer
+from build123d.operations_generic import mirror, sweep, fillet, chamfer, BuildLine
 from build123d.operations_part import extrude, revolve
 from build123d.build_enums import AngularDirection
 
-from .utils import FakeBuilder, PPos, _defined, _defined_all, param_on_point, trim_wire, assert_args, debug
+from .utils import FakeBuilder, PPos, _defined, _defined_all, param_on_point, trim_wire, assert_args, debug, reversed_wire
 from .tools import make_axis, intersection
 
 b123_mirror = mirror
@@ -33,7 +33,10 @@ class build_line:
         else:
             self._start_tangent = self.to_direction(tangent)
 
-        self._builder = FakeBuilder(plane)
+        self._builder = BuildLine(plane)
+
+    def to_local_vector(self, v):
+        return v.transform(self.plane.forward_transform)
 
     def to_vector(self, v, ref=None):
         if isinstance(v, Pos):
@@ -54,7 +57,7 @@ class build_line:
 
     def to_direction(self, v):
         if isinstance(v, Pos):
-            v = v.position.to_tuple()
+            v = tuple(v.position)
 
         if isinstance(v, Vector):
             return v
@@ -358,25 +361,30 @@ def op_arc(lb, radius=None, size=None, to=None, tangent=True,
     elif tangent is not None and tangent is not False:
         tangent = lb.to_direction(tangent)
 
-    with lb._builder:
-        if _defined_all(radius, size) and center is None:
-            # JernArc, reimplemented
-            ax = make_axis(lb.plane)
-            n = tangent.rotate(ax, math.copysign(90, size))
-            c = e + n.normalized() * radius
-            ep = c + (e - c).rotate(ax, size)
-            return lb.add_shape(BaseLineObject(Edge.make_tangent_arc(e, tangent, ep)))
-        elif _defined(to) and tangent:
-            return lb.add_shape(TangentArc(e, lb.to_vector(to, e), tangent=tangent))
-        elif _defined_all(to, radius) and not tangent:
-            return lb.add_shape(RadiusArc(e, lb.to_vector(to, e), radius, short_sagitta=short))
-        elif _defined_all(center, radius, size):
-            start_angle = start_angle or 0
-            if center is True:
-                center = lb.e
-            else:
-                center = lb.to_vector(center, e)
-            return lb.add_shape(CenterArc(center, radius, start_angle, size))
+    if _defined_all(radius, size) and center is None:
+        # JernArc, reimplemented
+        ax = make_axis(lb.plane)
+        n = tangent.rotate(ax, math.copysign(90, size))
+        c = e + n.normalized() * radius
+        ep = c + (e - c).rotate(ax, size)
+        return lb.add_shape(BaseEdgeObject(Edge.make_tangent_arc(e, tangent, ep)))
+    elif _defined(to) and tangent:
+        with lb._builder:
+            TangentArc(lb.to_local_vector(e), lb.to_local_vector(lb.to_vector(to, e)), tangent=lb.to_local_vector(tangent))
+        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))
+    elif _defined_all(to, radius) and not tangent:
+        with lb._builder:
+            RadiusArc(lb.to_local_vector(e), lb.to_local_vector(lb.to_vector(to, e)), radius, short_sagitta=short)
+        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))
+    elif _defined_all(center, radius, size):
+        start_angle = start_angle or 0
+        if center is True:
+            center = lb.e
+        else:
+            center = lb.to_vector(center, e)
+        with lb._builder:
+            CenterArc(lb.to_local_vector(center), radius, start_angle, size)
+        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))
 
     assert False
 
@@ -397,7 +405,7 @@ def op_ellipse_arc(lb, r1, r2, size, start_angle=0, start=None, tangent=True):
         et = lb.to_direction(tangent)
 
     edge = Edge.make_ellipse(r1, r2, lb.plane, start_angle, start_angle+size)
-    s = BaseLineObject(edge)
+    s = BaseEdgeObject(edge)
 
     ra = (s % 0).get_signed_angle(et, lb.plane.z_dir)
     s = s.rotate(Axis(s @ 0, lb.plane.z_dir), ra)
@@ -520,6 +528,8 @@ def _fillet_helper(lb: build_line, count: int, closed: bool) -> tuple[int, list[
     fpoints = [it.at(1) for it in to_fuse[:-1]]
     fused = to_fuse[0].fuse(*to_fuse[1:])
     w = Wire(fused.edges())
+    # from .testing import sadd
+    # sadd(boo=w)
     vlist = [v for v in w.vertices() if Vector(v) in fpoints]
     return sidx, vlist, keep
 
@@ -532,7 +542,8 @@ def op_fillet(lb, radius, count=1, closed=False):
     spoint = lb._shapes[sidx] @ 0
     fobj = fillet(vlist, radius)
     if not closed and fobj @ 0 != spoint:
-        fobj.wrapped.Reverse()
+        fobj = reversed_wire(fobj)
+        # fobj.wrapped.Reverse()
     keep.append(fobj)
     lb._shapes = keep
     return fobj
@@ -546,7 +557,8 @@ def op_chamfer(lb, length, count=1, length2=None, angle=None, closed=False):
     spoint = lb._shapes[sidx] @ 0
     fobj = chamfer(vlist, length=length, length2=length2, angle=angle)
     if fobj @ 0 != spoint:
-        fobj.wrapped.Reverse()
+        fobj = reversed_wire(fobj)
+        # fobj.wrapped.Reverse()
     keep.append(fobj)
     lb._shapes = keep
     return fobj

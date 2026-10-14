@@ -199,11 +199,12 @@ def test_23_T_24_curved_support():
     p2 = extrude(make_hull((c1 + c2).edges()), 11)
 
     cl1, cl2 = c1.cylinder(60), c2.cylinder(32)
-    part = p1 + p2 + cl1 - cl1.new(d=35) + cl2 - cl2.new(d=20)
+    ends = split(cl1+cl2, Plane.XY.offset(11))
+    part = p1 + p2 + ends - cl1.new(d=35) - cl2.new(d=20)
 
     assert part.volume*densc == approx(1294.13, abs=0.01)
     return part
 
 
 if __name__ == '__main__':
-    main_yacv()
+    main_ocp_vscode()

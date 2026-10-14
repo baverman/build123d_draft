@@ -8,7 +8,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.8"
-build123d = "^0.7.0"
+build123d = "^0.13"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
@@ -22,4 +22,7 @@ build-backend = "poetry.core.masonry.api"
 markers = [
     "current: mark a current test to execute",
     "views: declare multiple views for part",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:lib3mf",
 ]
