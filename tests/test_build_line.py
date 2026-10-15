@@ -3,10 +3,10 @@ import pytest
 from pytest import approx
 
 from build123d import *
-from build123d_draft import *
+from build123d_draft import *  # type: ignore[assignment]
 
 
-def test_op_close_axis_transformation():
+def test_op_close_axis_transformation() -> None:
     l = build_line(Plane.XZ.offset(-5)).append(
         X(10), Y(10), op_close(Axis.Y)
     )
@@ -17,7 +17,7 @@ def test_op_close_axis_transformation():
     assert v == [Vector(it) for it in [(0, 5, 0), (10, 5, 0), (10, 5, 10), (0, 5, 10), (0, 5, 0)]]
 
 
-def test_localize_direction_vector():
+def test_localize_direction_vector() -> None:
     l = build_line(Plane.XZ.offset(-5))
     assert l.to_direction((0, 1)) == Vector(0, 0, 1)
     assert l.to_direction(Vector(0, 1)) == Vector(0, 1, 0)
@@ -25,13 +25,13 @@ def test_localize_direction_vector():
     assert l.to_direction(Pos(0, 1)) == Vector(0, 0, 1)
 
 
-def assert_cont_edges(edges, *points):
+def assert_cont_edges(edges: list[Edge], *points: Vector) -> None:
     epoints = [(it.s, it.e) for it in edges]
-    points = list(zip(points, points[1:]))
-    assert epoints == points
+    npoints = list(zip(points, points[1:]))
+    assert epoints == npoints
 
 
-def test_trim():
+def test_trim() -> None:
     l = build_line().append(
         op_line(start=XX(10), to=XX(5)),
         op_line(to=XX(0))

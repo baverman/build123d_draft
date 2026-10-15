@@ -7,7 +7,8 @@ section using `build_line` as a main draft tool.
 
 [tttt]: https://build123d.readthedocs.io/en/latest/tttt.html
 """
-from build123d import *
+from build123d import (Part, Axis, Plane, Pos, Box, extrude, RectangleRounded,
+    Ellipse, fillet, split, CounterSinkHole, make_hull)
 from build123d_draft import *
 from pytest import approx
 import pytest
@@ -21,10 +22,10 @@ densc = 7800e-6
 
 @slist
 @pytest.mark.views((100, 0))
-def test_ppack_01_01():
+def test_ppack_01_01() -> Part:
     l = build_line(Plane.XZ.offset(25)).append(
         Y(42),
-        op_arc(26, -180, name='a'),
+        op_arc(26, -180).named('a'),
         YY(15),
         X(30),
         op_fillet(9),
@@ -32,7 +33,7 @@ def test_ppack_01_01():
     )
 
     hole = cbore_d(34, 4, 24, 12)
-    part = mirror_add(l.extrude(-12) - Pos(l.a.arc_center) * -R.Y * hole)
+    part: Part = mirror_add(l.extrude(-12) - Pos(l.a.arc_center) * -R.Y * hole)
 
     part += Box(115, 50, 15, align=A.dw)
     part -= X(115-10) * make_slot(90, h=15, center=False, d=12, align=A.e)
@@ -49,7 +50,7 @@ def test_ppack_01_01():
 
 @slist
 @pytest.mark.views((60, 15), view(60, 15, clip=-Plane.XZ), size=(480, 480))
-def test_ppack_01_02():
+def test_ppack_01_02() -> Part:
     l = build_line(X(49/2), Plane.XZ).append(
         Y(40),
         op_ellipse_arc(20, 8, 90),
@@ -78,7 +79,7 @@ def test_ppack_01_02():
 
 @slist
 @pytest.mark.views((90, 0))
-def test_ppack_01_03():
+def test_ppack_01_03() -> Part:
     l = build_line(Plane.XZ).append(
         Y(-34), X(95), Y(34), op_fillet(18, 2),
         X(-18), Y(16-34), XX(14), YY(0), op_fillet(7, 2), op_close()
@@ -97,7 +98,7 @@ def test_ppack_01_03():
 
 
 @slist
-def test_ppack_01_04():
+def test_ppack_01_04() -> Part:
     l = build_line(Plane.XZ).append(
         X(80-38/2-10), Y(7-30), op_fillet(5),
         X(10), Y(30), XX(0), op_fillet(10), op_close()
@@ -122,9 +123,9 @@ def test_ppack_01_04():
 
 
 @slist
-def test_ppack_01_06():
+def test_ppack_01_06() -> Part:
     l = build_line((44/2, 69-15)).append(
-        op_arc(10, -45-90, name='a'),
+        op_arc(10, -45-90).named('a'),
         op_line(until=XX(15)), YY(0), op_fillet(12),
         op_close(Axis.Y)
     )
@@ -147,10 +148,10 @@ def test_ppack_01_06():
 
 @slist
 @pytest.mark.views((10, 0))
-def test_ppack_01_09():
+def test_ppack_01_09() -> Part:
     cl = build_line(Plane.XZ).append(
         op_line(angle=-45, until=YY(-45)),
-        op_line(6, 90), op_line(angle=90, until=XX(0), name='l'),
+        op_line(6, 90), op_line(angle=90, until=XX(0)).named('l'),
     )
 
     p1 = split(make_slot(cl.l.length*2, h=-6, center=False, d=75),
@@ -180,15 +181,15 @@ def test_ppack_01_09():
 
 
 @slist
-def test_23_T_24_curved_support():
+def test_23_T_24_curved_support() -> Part:
     r1, r2 = 55/2, 30/2
 
     l = build_line(Plane.XZ).append(
         op_arc(30, 90-8, center=(77-r1, 0)),
         op_line(until=XX(r1)),
         op_move(end=YY(50)),
-        op_extend(end=5, reverse=True),
-        op_trim(Axis.X.offset((125, 32)), add=True),
+        op_extend(end=5).reversed,
+        op_trim(axis_offset(Axis.X, (125, 32)), add=True),
         op_fillet(66),
         op_close(Axis.X),
     )
@@ -200,7 +201,7 @@ def test_23_T_24_curved_support():
 
     cl1, cl2 = c1.cylinder(60), c2.cylinder(32)
     ends = split(cl1+cl2, Plane.XY.offset(11))
-    part = p1 + p2 + ends - cl1.new(d=35) - cl2.new(d=20)
+    part: Part = p1 + p2 + ends - cl1.new(d=35) - cl2.new(d=20)
 
     assert part.volume*densc == approx(1294.13, abs=0.01)
     return part

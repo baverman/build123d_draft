@@ -1,6 +1,7 @@
 import os
 import pytest
 import dataclasses
+from typing import Iterator
 
 import PIL
 
@@ -17,7 +18,7 @@ class view:
 
 
 @pytest.fixture(autouse=True)
-def render(request):
+def render(request: pytest.FixtureRequest) -> Iterator[None]:
     yield
     if os.environ.get('RENDER_MODELS', '0') != '0':
         fname = 'assets/' + os.path.basename(request.node.path).rpartition('.')[0] + '_' + request.node.name + '.png'

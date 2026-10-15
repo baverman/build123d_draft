@@ -1,36 +1,48 @@
 import sys
 import functools
+from typing import TypeVar, Callable, ParamSpec, Any
 
-from build123d import Sphere
+from build123d import Sphere, Shape
 
 from .build_line import build_line
 
+ShowObject = Shape[Any] | build_line
+P = ParamSpec('P')
+R = TypeVar('R')
 
-def set_current(fn):
+_current_fn: Callable[[], ShowObject] | None = None
+
+
+def set_current(fn: Callable[[], ShowObject]) -> Callable[[], ShowObject]:
+    global _current_fn
     import pytest
-    set_current.fn = fn
+
+    _current_fn = fn
     return pytest.mark.current(fn)
-set_current.fn = None
 
 
 class ShowList:
-    def __init__(self):
-        self.objects = []
-        self.names = []
+    def __init__(self) -> None:
+        self.objects: list[ShowObject] = []
+        self.names: list[str] = []
         self.cnt = 0
 
-    def reset(self):
+    def reset(self) -> None:
         self.objects.clear()
         self.names.clear()
         self.cnt = 0
 
-    def __call__(self, fn):
+    def __call__(self, fn: Callable[P, ShowObject | None]) -> Callable[P, ShowObject | None]:
         @functools.wraps(fn)
-        def inner(*args, **kwargs):
-            self.append(part=fn(*args, **kwargs))
+        def inner(*args: P.args, **kwargs: P.kwargs) -> ShowObject | None:
+            part = fn(*args, **kwargs)
+            if part is not None:
+                self.append(part=part)
+            return part
+
         return inner
 
-    def origin_radius(self):
+    def origin_radius(self) -> float:
         if not self.objects:
             return 1
         o = self.objects[-1]
@@ -43,7 +55,7 @@ class ShowList:
         else:
             return 1
 
-    def append(self, *items, **kwargs):
+    def append(self, *items: ShowObject, **kwargs: ShowObject) -> None:
         olist = []
         if items:
             fl = sys._getframe(1).f_locals
@@ -67,28 +79,33 @@ class ShowList:
             self.objects.append(o)
             self.names.append(n)
 
+
 slist = ShowList()
 sadd = slist.append
 
-def main_yacv():
-    from yacv_server import show
 
-    set_current.fn and slist.reset()
+def main_yacv() -> None:
+    from yacv_server import show  # type: ignore
+
+    if _current_fn:
+        slist.reset()
     sadd(origin=Sphere(1))
-    set_current.fn and set_current.fn()
+    if _current_fn:
+        _current_fn()
     show(*slist.objects, names=slist.names)
 
 
-def main_ocp_vscode(**options):
-    from ocp_vscode import show, set_port, set_defaults
-    from ocp_vscode.config import Camera
+def main_ocp_vscode(**options: object) -> None:
+    from ocp_vscode import show, set_port, set_defaults  # type: ignore[import-untyped]
+    from ocp_vscode.config import Camera  # type: ignore[import-untyped]
+
     set_port(options.pop('port', 3939))
     # if options:
     #     set_defaults(**options)
 
-    if set_current.fn:
+    if _current_fn:
         slist.reset()
-        set_current.fn()
+        _current_fn()
     show(*slist.objects, names=slist.names, progress='', reset_camera=Camera.KEEP)
 
 

@@ -1,17 +1,22 @@
 import io
 import functools
 import math
+from typing import TypeAlias, no_type_check
 
-import OCP
+import OCP  # type: ignore[import-untyped]
 import numpy as np
 from PIL import Image
 
 from build123d import Face, Color
 
-dpr = math.pi/180
+dpr = math.pi / 180
+
+ColorT: TypeAlias = OCP.Quantity.Quantity_Color | Color | tuple[float, float, float]
 
 
-def ocp_color(r, g=None, b=None):
+def ocp_color(
+    r: ColorT, g: float | None = None, b: float | None = None
+) -> OCP.Quantity.Quantity_Color:
     if isinstance(r, OCP.Quantity.Quantity_Color):
         return r
     elif isinstance(r, Color):
@@ -30,7 +35,9 @@ PROJECTIONS = {
 
 
 @functools.lru_cache(1)
-def render_context(size, bg):
+def render_context(
+    size: tuple[int, int], bg: ColorT
+) -> tuple[OCP.V3d.V3d_View, OCP.AIS.AIS_InteractiveContext]:
     disp = OCP.Aspect.Aspect_DisplayConnection()
     gl = OCP.OpenGl.OpenGl_GraphicDriver(disp, True)
     gl.ChangeOptions().swapInterval = 0
@@ -39,7 +46,7 @@ def render_context(size, bg):
     viewer.SetDefaultLights()
     viewer.SetLightOn()
 
-    window = OCP.Xw.Xw_Window(disp, "some", 64, 64, *size)
+    window = OCP.Xw.Xw_Window(disp, 'some', 64, 64, *size)
     window.SetVirtual(True)
     view = OCP.V3d.V3d_View(viewer)
     view.SetWindow(window)
@@ -54,9 +61,15 @@ def render_context(size, bg):
 class ImageExporter:
     default_color = ocp_color(0.9, 0.8, 0.23)
 
-    def __init__(self, size=(720, 480), bg=None, transparent=True, render_scale=2.0):
+    def __init__(
+        self,
+        size: tuple[int, int] = (720, 480),
+        bg: ColorT | None = None,
+        transparent: bool = True,
+        render_scale: float = 2.0,
+    ) -> None:
         self.size = size
-        self.rsize = int(size[0]*render_scale), int(size[1]*render_scale)
+        self.rsize = int(size[0] * render_scale), int(size[1] * render_scale)
         self.render_scale = render_scale
         self.bg = bg
         self.transparent = transparent
@@ -65,21 +78,32 @@ class ImageExporter:
         self.clear()
         self.configure()
 
-    def clear(self, reset_view=True):
+    def clear(self, reset_view: bool = True) -> None:
         self.ctx.RemoveAll(False)
         if reset_view:
             self.view.Reset(False)
 
-    def configure(self):
+    def configure(self) -> None:
         drawer = self.ctx.DefaultDrawer()
         mname = OCP.Graphic3d.Graphic3d_NameOfMaterial_Steel
         m = OCP.Graphic3d.Graphic3d_MaterialAspect(mname)
-        drawer.ShadingAspect().SetMaterial(m);
+        drawer.ShadingAspect().SetMaterial(m)
         drawer.SetFaceBoundaryDraw(True)
         drawer.ShadingAspect().SetColor(ocp_color(self.default_color))
 
-    def show(self, shape, clip=None, hatch=True, hscale=0.05, alpha=None,
-             edges=None, line_width=None, clip_outline=True, color=None):
+    @no_type_check
+    def show(
+        self,
+        shape,
+        clip=None,
+        hatch=True,
+        hscale=0.05,
+        alpha=None,
+        edges=None,
+        line_width=None,
+        clip_outline=True,
+        color=None,
+    ):
         shape_color = color or getattr(shape, 'color', None)
 
         prs = OCP.AIS.AIS_Shape(shape.wrapped)
@@ -115,7 +139,9 @@ class ImageExporter:
 
             cp = OCP.Graphic3d.Graphic3d_ClipPlane(clip.wrapped)
             if hatch:
-                tx = OCP.Graphic3d.Graphic3d_Texture2D(OCP.TCollection.TCollection_AsciiString('resources/hatch_2.png'))
+                tx = OCP.Graphic3d.Graphic3d_Texture2D(
+                    OCP.TCollection.TCollection_AsciiString('resources/hatch_2.png')
+                )
                 tx.GetParams().SetScale(OCP.gp.gp_Vec2f(hscale, hscale))
                 tx.EnableModulate()
                 tx.EnableRepeat()
@@ -128,6 +154,7 @@ class ImageExporter:
 
         self.ctx.Display(prs, OCP.AIS.AIS_Shaded, -1, False)
 
+    @no_type_check
     def setup_view(self, start=None, rotz=None, roty=None, zoom=None, fit=0.01, proj=None):
         if not start:
             start = (0, 0, 0)
@@ -137,17 +164,18 @@ class ImageExporter:
         self.view.SetProj(PROJECTIONS.get(proj, proj or OCP.V3d.V3d_TypeOfOrientation_Zup_AxoRight))
 
         if rotz is not None:
-            self.view.Rotate(rotz*dpr)
+            self.view.Rotate(rotz * dpr)
 
         if roty is not None:
-            self.view.Rotate(0, roty*dpr, 0)
+            self.view.Rotate(0, roty * dpr, 0)
 
         if zoom is not None:
             self.view.SetZoom(zoom)
         else:
             self.view.FitAll(fit, False)
 
-    def export(self):
+    @no_type_check
+    def export(self) -> None:
         image = OCP.Image.Image_AlienPixMap()
         self.view.ToPixMap(image, *self.rsize)
         buf = io.BytesIO()
@@ -158,7 +186,7 @@ class ImageExporter:
         if self.transparent:
             out = out.convert('RGBA')
             d = np.array(out)
-            key_color = tuple(int(it*255) for it in self.bg) + (255,)
+            key_color = tuple(int(it * 255) for it in self.bg) + (255,)
             d[(d == key_color).all(axis=-1)] = [0, 0, 0, 0]
             out = Image.fromarray(d, mode='RGBA')
 

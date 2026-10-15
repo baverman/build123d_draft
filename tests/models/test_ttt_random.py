@@ -4,7 +4,7 @@
 
 A selection of TTT models from WC streams or other sources.
 """
-from build123d import *
+from build123d import Plane, Pos, Part, Axis
 from build123d_draft import *
 from pytest import approx
 import pytest
@@ -19,7 +19,7 @@ densb = 2700e-6
 densc = 7800e-6
 
 @slist
-def _test_model1():
+def _test_model1() -> Part:
     l = build_line(Plane.XZ).append(
         YY(55), X(20), YY(9), XX(155), Y(-9),
         op_arc(560, to=(0, 0), tangent=False)
@@ -40,7 +40,7 @@ def _test_model1():
 
 @slist
 @pytest.mark.views((30, 0), view(30, 0, clip=-Plane.XZ, hscale=0.02), size=(600, 480))
-def test_24WC_12_tube_plug():
+def test_24WC_12_tube_plug() -> Part:
     """
     [Draft](https://youtu.be/JrDNdeHMO9Q?t=71).
 

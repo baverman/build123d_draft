@@ -9,7 +9,7 @@ Models here are augmented for spoil-free results.
 [ttt-practice]: https://www.tootalltoby.com/practice/
 """
 from build123d import *
-from build123d_draft import *
+from build123d_draft import *  # type: ignore[assignment]
 from pytest import approx
 import pytest
 
@@ -24,7 +24,7 @@ densc = 7800e-6
 
 @slist
 @pytest.mark.views((0, -5))
-def test_corner_cap():
+def test_corner_cap() -> Part:
     """
     [Source](https://www.tootalltoby.com/practice/a441dcaa-0d1c-42f0-b037-73786e93a9ea).
     """
@@ -54,12 +54,12 @@ def test_corner_cap():
 
 @slist
 @pytest.mark.views((0, -5))
-def test_lstop_simple():
+def test_lstop_simple() -> Part:
     """
     [Source](https://www.tootalltoby.com/practice/6926892f-c1e3-4d84-8ed8-359eb98d51b8).
     """
     l = build_line((130, 0), tangent=(0, 1)).append(
-        op_arc(77, 45, name='a'), op_trim(Axis.X.offset(25, 85/2), add=True),
+        op_arc(77, 45).named('a'), op_trim(axis_offset(Axis.X, 25, 85/2), add=True),
         op_fillet(20), op_close(mirror=Axis.X)
     )
     part = l.extrude(12)

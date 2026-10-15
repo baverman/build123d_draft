@@ -1,32 +1,94 @@
 import math
+import functools
 from itertools import chain as it_chain
+from dataclasses import dataclass, replace
+from typing import (
+    Any,
+    TypeAlias,
+    Mapping,
+    Callable,
+    ParamSpec,
+    Concatenate,
+    Literal,
+    Iterator
+)
 
-from build123d.geometry import Plane, Axis, Pos, Vector, Location
+from build123d import BuildLine, Sketch, Part
+from build123d.geometry import Plane, Axis, Pos, Vector, Location, VectorLike
 from build123d.topology import Shape, ShapeList, Wire, Edge, Vertex
-from build123d.objects_curve import Line, IntersectingLine, TangentArc, RadiusArc, CenterArc, BaseEdgeObject
+from build123d.topology.shape_core import TOPODS
+from build123d.topology.one_d import Mixin1D
+from build123d.topology.composite import Curve
+from build123d.objects_curve import (
+    Line,
+    IntersectingLine,
+    TangentArc,
+    RadiusArc,
+    CenterArc,
+    BaseEdgeObject,
+)
 from build123d.operations_sketch import make_face
-from build123d.operations_generic import mirror, sweep, fillet, chamfer, BuildLine
+from build123d.operations_generic import mirror as b123_mirror, sweep, fillet, chamfer, SweepType
 from build123d.operations_part import extrude, revolve
 from build123d.build_enums import AngularDirection
 
-from .utils import FakeBuilder, PPos, _defined, _defined_all, param_on_point, trim_wire, assert_args, debug, reversed_wire
-from .tools import make_axis, intersection
+from .utils import (
+    _defined,
+    _defined_all,
+    assert_args,
+    debug,
+)
+from .tools import make_axis, intersection, PPos, param_on_point, trim_wire, reversed_wire
 
-b123_mirror = mirror
+__all__ = [
+    'build_line',
+    'build_line_op',
+    'Op',
+    'op_arc',
+    'op_chamfer',
+    'op_close',
+    'op_drop',
+    'op_ellipse_arc',
+    'op_extend',
+    'op_fillet',
+    'op_line',
+    'op_move',
+    'op_start',
+    'op_trim',
+    'TrimOp',
+]
+
+_P = ParamSpec('_P')
+VLike = Vector | Pos | PPos | Axis | tuple[float, ...]
+TLike = Vector | Pos | Axis | tuple[float, ...]
+BuildLineOp: TypeAlias = Vector | Pos | tuple[float, ...] | Shape[Any] | 'Op'
+UntilType = Curve | Edge | Wire | Axis | Plane | Pos
+
+
+class TrimOp:
+    def trim(self, lb: build_line) -> tuple[Mixin1D[Any], Mixin1D[Any]]: ...  # type: ignore[empty-body]
 
 
 class build_line:
-    def __init__(self, start=None, plane=Plane.XY, tangent=None):
+    def __init__(
+        self,
+        start: Plane | VLike | None = None,
+        plane: Plane = Plane.XY,
+        tangent: TLike | None = None,
+    ) -> None:
         # TODO: use context to get current plane
         if isinstance(start, Plane):
-            start, plane = None, start
+            nstart, plane = None, start
+        else:
+            nstart = start
+
         self.plane = plane
-        self._shapes = []
-        self._named = {}
-        if start is None:
+        self._shapes: list[Mixin1D[Any]] = []
+        self._named: dict[str, Mixin1D[Any]] = {}
+        if nstart is None:
             self._start_point = plane.origin
         else:
-            self._start_point = self.to_vector(start, plane.origin)
+            self._start_point = self.to_vector(nstart, plane.origin)
 
         if tangent is None:
             self._start_tangent = plane.x_dir
@@ -35,10 +97,10 @@ class build_line:
 
         self._builder = BuildLine(plane)
 
-    def to_local_vector(self, v):
+    def to_local_vector(self, v: Vector) -> Vector:
         return v.transform(self.plane.forward_transform)
 
-    def to_vector(self, v, ref=None):
+    def to_vector(self, v: VLike, ref: Vector | None = None) -> Vector:
         if isinstance(v, Pos):
             if ref is None:
                 ref = self.e
@@ -55,29 +117,33 @@ class build_line:
 
         return v
 
-    def to_direction(self, v):
+    def to_direction(self, v: TLike) -> Vector:
+        nv: Vector | Axis | tuple[float, ...]
         if isinstance(v, Pos):
-            v = tuple(v.position)
+            nv = tuple(v.position)
+        else:
+            nv = v
 
-        if isinstance(v, Vector):
-            return v
-        elif isinstance(v, Axis):
-            return v.located(self.plane.location).direction
-        elif isinstance(v, tuple):
+        if isinstance(nv, Vector):
+            return nv
+        elif isinstance(nv, Axis):
+            ax: Axis = nv.located(self.plane.location)
+            return ax.direction
+        elif isinstance(nv, tuple):
             origin = self.to_vector((0, 0, 0))
-            return self.to_vector(v) - origin
+            return self.to_vector(nv) - origin
 
-        assert False, f'Unsupported type {type(v)}'
+        assert False, f'Unsupported type {type(nv)}'
 
-    def apply(self, op):
+    def apply(self, op: BuildLineOp) -> None:
         if isinstance(op, (Vector, Pos, tuple)):
-            v = self.to_vector(op)
-            self._shapes.append(Line(self.e, v))
+            cop: Vector | Pos | tuple[float, ...] = op
+            self._shapes.append(Line(self.e, self.to_vector(cop)))
         elif isinstance(op, Shape):
             self._shapes.append(op)
         else:
-            s = op.fn(self, *op.args, **op.kwargs)
-            if op.name:
+            s = op(self)
+            if op.name and s is not None:
                 s._lb_name = op.name
                 self._named[op.name] = s
             if op.reverse:
@@ -96,7 +162,7 @@ class build_line:
                     rv.extend(chains[-1])
                     self._shapes = rv
 
-    def append(self, *ops):
+    def append(self, *ops: BuildLineOp) -> 'build_line':
         for idx, op in enumerate(ops):
             try:
                 self.apply(op)
@@ -105,71 +171,69 @@ class build_line:
         return self
 
     @property
-    def e(self):
+    def e(self) -> Vector:
         if self._shapes:
             return self._shapes[-1] @ 1
         else:
             return self._start_point
 
     @property
-    def s(self):
+    def s(self) -> Vector:
         return self._shapes[0] @ 0
 
     @property
-    def ss(self):
+    def ss(self) -> Vector:
         return self._shapes[0] @ 1
 
     @property
-    def ee(self):
+    def ee(self) -> Vector:
         return self._shapes[-1] @ 0
 
-    def wire(self):
+    def wire(self) -> Wire:
         if len(self._shapes) == 1:
             return self._shapes[0]
         return self._shapes[0] + self._shapes[1:]
 
     def edges(self) -> ShapeList[Edge]:
-        return ShapeList([
-            e for shape in self._shapes for e in shape.edges()])
+        return ShapeList([e for shape in self._shapes for e in shape.edges()])
 
-    def face(self):
+    def face(self) -> Sketch:
         return make_face(self.wire())
 
-    def tangent(self, shape_idx=-1, param=1):
+    def tangent(self, shape_idx: int = -1, param: float = 1) -> Vector:
         if self._shapes:
             return self._shapes[shape_idx].tangent_at(param)
         return self._start_tangent
 
-    def normal(self, shape_idx=-1, param=1):
+    def normal(self, shape_idx: int = -1, param: float = 1) -> Vector:
         if self._shapes:
             t = self._shapes[shape_idx].tangent_at(param)
         else:
             t = self._start_tangent
         return t.rotate(make_axis(self.plane), 90)
 
-    def normal_loc(self, shape_idx=-1, param=1, tangent=1):
+    def normal_loc(self, shape_idx: int = -1, param: float = 1, tangent: float = 1) -> Location:
         p = self._shapes[shape_idx] @ param
         t = tangent * self.tangent(shape_idx, param)
         n = t.rotate(make_axis(self.plane), 90)
         return Location(Plane(p, x_dir=t, z_dir=n))
 
-    def to_normal_plane(self, axis, start=None):
+    def to_normal_plane(self, axis: Pos | Axis, start: Vector | None = None) -> Plane:
         if isinstance(axis, Pos):
             z_dir = getattr(axis, 'default_zdir', None)
             if z_dir is None:
                 raise Exception('Position should have a default Z direction')
             return Plane(self.to_vector(axis, start), z_dir=self.to_direction(z_dir))
         else:
-            gaxis = axis.located(self.plane.location)
-            n = gaxis.direction.rotate(
-                Axis(self.plane.origin, self.plane.z_dir), 90)
+            gaxis: Axis = axis.located(self.plane.location)
+            n = gaxis.direction.rotate(Axis(self.plane.origin, self.plane.z_dir), 90)
             return Plane(gaxis.position, z_dir=n)
 
-    def add_shape(self, shape):
+    def add_shape(self, shape: Shape[TOPODS]) -> Shape[TOPODS]:
         self._shapes.append(shape)
         return shape
 
-    def move(self, loc):
+    def move(self, loc: Vector | Location | tuple[float, ...]) -> None:
         if isinstance(loc, (tuple, Vector)):
             loc = Pos(loc)
         old = self._shapes
@@ -179,32 +243,35 @@ class build_line:
             if hasattr(o, '_lb_name'):
                 self._named[o._lb_name] = n
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Mixin1D[Any]:
         return self._shapes[idx]
 
-    def __getattr__(self, name):
+    def __iter__(self) -> Iterator[Mixin1D[Any]]:
+        return iter(self._shapes)
+
+    def __getattr__(self, name: str) -> Mixin1D[Any]:
         try:
             return self._named[name]
         except KeyError:
             raise AttributeError(name)
 
-    def revolvex(self):
+    def revolvex(self) -> Part:
         return revolve(self.face(), Axis.X.located(self.plane.location))
 
-    def revolvey(self):
+    def revolvey(self) -> Part:
         return revolve(self.face(), Axis.Y.located(self.plane.location))
 
-    def revolvez(self):
+    def revolvez(self) -> Part:
         return revolve(self.face(), Axis.Z.located(self.plane.location))
 
-    def sweep(self, face):
+    def sweep(self, face: SweepType) -> Part:
         return sweep(Plane(self.s, z_dir=self.tangent(0, 0)) * face, self.wire())
 
-    def extrude(self, amount, both=False, z_dir=True):
+    def extrude(self, amount: float, both: bool = False, z_dir: bool = True) -> Part:
         dir = self.plane.z_dir if z_dir else None
         return extrude(self.face(), amount, both=both, dir=dir)
 
-    def chains(self):
+    def chains(self) -> list[list[Shape[Any]]]:
         if not self._shapes:
             return []
 
@@ -219,34 +286,54 @@ class build_line:
         return rv
 
 
-class op_data_holder:
-    def __init__(self, fn, name, reverse, connect, args, kwargs):
-        self.fn = fn
-        self.name = name
-        self.reverse = reverse
-        self.connect = connect
-        self.args = args
-        self.kwargs = kwargs
+@dataclass
+class Op:
+    fn: Callable[..., Mixin1D[Any] | None]
+    name: str
+    reverse: bool
+    connect: bool
+    args: tuple[Any, ...]
+    kwargs: Mapping[str, Any]
 
-    def __repr__(self):
-        params = []
+    def __call__(self, lb: build_line) -> Mixin1D[Any] | None:
+        return self.fn(lb, *self.args, **self.kwargs)
+
+    def __repr__(self) -> str:
+        params: list[str] = []
         params.extend(repr(it) for it in self.args)
         params.extend(f'{k}={v!r}' for k, v in self.kwargs.items())
         return f'{self.fn.__name__}({", ".join(params)})'
 
+    def named(self, name: str) -> Op:
+        return replace(self, name=name)
 
-def build_line_op(fn):
-    def inner(*args, **kwargs):
-        name = kwargs.pop('name', None)
-        reverse = kwargs.pop('reverse', False)
-        connect = kwargs.pop('connect', False)
+    @property
+    def connected(self) -> Op:
+        return replace(self, connect=True)
+
+    @property
+    def reversed(self) -> Op:
+        return replace(self, reverse=True)
+
+
+def build_line_op(
+    fn: Callable[Concatenate[build_line | None, _P], Mixin1D[Any] | None],
+) -> Callable[_P, Op]:
+    @functools.wraps(fn)
+    def inner(*args: _P.args, **kwargs: _P.kwargs) -> Op:
+        name: str = kwargs.pop('name', None)  # type: ignore[assignment]
+        reverse: bool = kwargs.pop('reverse', False)  # type: ignore[assignment]
+        connect: bool = kwargs.pop('connect', False)  # type: ignore[assignment]
         fn(None, *args, **kwargs)
-        return op_data_holder(fn, name, reverse, connect, args, kwargs)
+        return Op(fn, name, reverse, connect, args, kwargs)
+
     return inner
 
 
 @build_line_op
-def op_start(lb, start=None, tangent=None):
+def op_start(
+    lb: build_line | None, start: VLike | None = None, tangent: TLike | None = None
+) -> None:
     if lb is None:
         return
 
@@ -257,9 +344,23 @@ def op_start(lb, start=None, tangent=None):
         lb._start_tangent = lb.to_direction(tangent)
 
 
+# @overload
+# def op_line(*, dir: TLike, length: float) -> Op: ...
+# @overload
+# def op_line(*, dir: TLike, until: UntilType) -> Op: ...
+
+
 @build_line_op
-def op_line(lb, length=None, angle=None, dir=None, start=None, to=None,
-            until=None, tangent=None):
+def op_line(
+    lb: build_line | None,
+    length: float | None = None,
+    angle: float | None = None,
+    dir: TLike | None = None,
+    start: VLike | None = None,
+    to: VLike | None = None,
+    until: UntilType | None = None,
+    tangent: TLike | None = None,
+) -> Mixin1D[Any] | None:
     if lb is None:
         assert_args(
             locals(),
@@ -268,7 +369,7 @@ def op_line(lb, length=None, angle=None, dir=None, start=None, to=None,
             ['to', (None, 'length', 'until')],
             [('length', 'until'), '-dir', '-angle', '-to'],
         )
-        return
+        return None
 
     reset_tangent = False
     if start is None:
@@ -291,31 +392,40 @@ def op_line(lb, length=None, angle=None, dir=None, start=None, to=None,
                     tangent = lb.tangent()
             else:
                 tangent = lb.to_direction(tangent)
-            dir = tangent.rot(angle or 0, make_axis(lb.plane))
+            dir = tangent.rotate(make_axis(lb.plane), angle or 0)
     else:
         dir = lb.to_direction(dir)
 
     if length is not None:
         return lb.add_shape(Line(start, start + dir * length))
 
+    assert until
     return lb.add_shape(_until_helper(lb, start, dir, until))
 
 
-def _until_helper(lb, start, dir, until):
+def _until_helper(lb: build_line, start: Vector, dir: Vector, until: UntilType) -> BaseEdgeObject:
+    nuntil: Curve | Edge | Wire | Axis | Plane
     if isinstance(until, Pos):
-        until = lb.to_normal_plane(until, start)
+        nuntil = lb.to_normal_plane(until, start)
+    else:
+        nuntil = until
 
-    if isinstance(until, (Axis, Plane)):
-        to = Axis(start, dir).intersect(until)
+    if isinstance(nuntil, (Axis, Plane)):
+        # TODO: intersection could be parallel and none
+        to: Vector = Axis(start, dir).intersect(nuntil)  # type: ignore[assignment]
         return Line(start, to)
 
-    return IntersectingLine(start, dir, until)
+    return IntersectingLine(start, dir, nuntil)
 
 
 @build_line_op
-def op_extend(lb, start=None, end=None):
+def op_extend(
+    lb: build_line | None,
+    start: float | UntilType | None = None,
+    end: float | UntilType | None = None,
+) -> Mixin1D[Any] | None:
     if lb is None:
-        return
+        return None
 
     l = lb._shapes.pop()
     segments = [l]
@@ -339,8 +449,17 @@ def op_extend(lb, start=None, end=None):
 
 
 @build_line_op
-def op_arc(lb, radius=None, size=None, to=None, tangent=True,
-           short=True, center=None, start_angle=None, start=None):
+def op_arc(
+    lb: build_line | None,
+    radius: float | None = None,
+    size: float | None = None,
+    to: VLike | None = None,
+    tangent: TLike | bool = True,
+    short: bool = True,
+    center: VLike | None = None,
+    start_angle: float | None = None,
+    start: VLike | None = None,
+) -> Mixin1D[Any] | None:
     if lb is None:
         assert_args(
             locals(),
@@ -349,7 +468,7 @@ def op_arc(lb, radius=None, size=None, to=None, tangent=True,
             ['to', 'radius', '!tangent', '-center'],
             ['center', 'radius', 'size', (None, 'start_angle'), '-to'],
         )
-        return
+        return None
 
     if start is None:
         e = lb.e
@@ -364,35 +483,52 @@ def op_arc(lb, radius=None, size=None, to=None, tangent=True,
     if _defined_all(radius, size) and center is None:
         # JernArc, reimplemented
         ax = make_axis(lb.plane)
-        n = tangent.rotate(ax, math.copysign(90, size))
-        c = e + n.normalized() * radius
-        ep = c + (e - c).rotate(ax, size)
-        return lb.add_shape(BaseEdgeObject(Edge.make_tangent_arc(e, tangent, ep)))
+        n = tangent.rotate(ax, math.copysign(90, size))  # type: ignore[union-attr,arg-type]
+        c = e + n.normalized() * radius  # type: ignore[operator]
+        ep = c + (e - c).rotate(ax, size)  # type: ignore[arg-type,operator]
+        return lb.add_shape(BaseEdgeObject(Edge.make_tangent_arc(e, tangent, ep)))  # type: ignore[arg-type]
     elif _defined(to) and tangent:
         with lb._builder:
-            TangentArc(lb.to_local_vector(e), lb.to_local_vector(lb.to_vector(to, e)), tangent=lb.to_local_vector(tangent))
-        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))
+            TangentArc(
+                lb.to_local_vector(e),
+                lb.to_local_vector(lb.to_vector(to, e)),  # type: ignore[arg-type]
+                tangent=lb.to_local_vector(tangent),
+            )
+        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))  # type: ignore[union-attr]
     elif _defined_all(to, radius) and not tangent:
         with lb._builder:
-            RadiusArc(lb.to_local_vector(e), lb.to_local_vector(lb.to_vector(to, e)), radius, short_sagitta=short)
-        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))
+            RadiusArc(
+                lb.to_local_vector(e),
+                lb.to_local_vector(lb.to_vector(to, e)),  # type: ignore[arg-type]
+                radius,  # type: ignore[arg-type]
+                short_sagitta=short,
+            )
+        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))  # type: ignore[union-attr]
     elif _defined_all(center, radius, size):
         start_angle = start_angle or 0
-        if center is True:
+        if center is True:  # type: ignore[comparison-overlap]
             center = lb.e
         else:
-            center = lb.to_vector(center, e)
+            center = lb.to_vector(center, e)  # type: ignore[arg-type]
         with lb._builder:
-            CenterArc(lb.to_local_vector(center), radius, start_angle, size)
-        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))
+            CenterArc(lb.to_local_vector(center), radius, start_angle, size)  # type: ignore[arg-type]
+        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))  # type: ignore[union-attr]
 
     assert False
 
 
 @build_line_op
-def op_ellipse_arc(lb, r1, r2, size, start_angle=0, start=None, tangent=True):
+def op_ellipse_arc(
+    lb: build_line | None,
+    r1: float,
+    r2: float,
+    size: float,
+    start_angle: float = 0,
+    start: VLike | None = None,
+    tangent: TLike | Literal[True] = True,
+) -> Mixin1D[Any] | None:
     if lb is None:
-        return
+        return None
 
     if start is None:
         e = lb.e
@@ -404,7 +540,7 @@ def op_ellipse_arc(lb, r1, r2, size, start_angle=0, start=None, tangent=True):
     else:
         et = lb.to_direction(tangent)
 
-    edge = Edge.make_ellipse(r1, r2, lb.plane, start_angle, start_angle+size)
+    edge = Edge.make_ellipse(r1, r2, lb.plane, start_angle, start_angle + size)
     s = BaseEdgeObject(edge)
 
     ra = (s % 0).get_signed_angle(et, lb.plane.z_dir)
@@ -413,7 +549,7 @@ def op_ellipse_arc(lb, r1, r2, size, start_angle=0, start=None, tangent=True):
 
 
 @build_line_op
-def op_drop(lb, idx=0):
+def op_drop(lb: build_line | None, idx: int = 0) -> None:
     if not lb:
         return
 
@@ -421,9 +557,15 @@ def op_drop(lb, idx=0):
 
 
 @build_line_op
-def op_close(lb, both=None, end=None, start=None, mirror=None):
+def op_close(
+    lb: build_line | None,
+    both: Pos | Axis | Plane | None = None,
+    end: Pos | Axis | Plane | None = None,
+    start: Pos | Axis | Plane | None = None,
+    mirror: Pos | Axis | Plane | None = None,
+) -> Mixin1D[Any] | None:
     if not lb:
-        return
+        return None
 
     if both:
         start = end = both
@@ -431,42 +573,55 @@ def op_close(lb, both=None, end=None, start=None, mirror=None):
     if mirror is not None:
         start = end = mirror
 
+    nstart: Plane | None
     if isinstance(start, (Axis, Pos)):
-        start = lb.to_normal_plane(start)
+        nstart = lb.to_normal_plane(start)
+    else:
+        nstart = start
 
+    nend: Plane | None
     if isinstance(end, (Axis, Pos)):
-        end = lb.to_normal_plane(end)
+        nend = lb.to_normal_plane(end)
+    else:
+        nend = end
 
-    if end is not None:
-        p = lb.e.project_to_plane(end)
+    if nend is not None:
+        p = lb.e.project_to_plane(nend)
         if p not in (lb.e, lb.s):
             lb.add_shape(Line(lb.e, p))
 
-    if start is not None:
-        p = lb.s.project_to_plane(start)
+    if nstart is not None:
+        p = lb.s.project_to_plane(nstart)
         if p not in (lb.e, lb.s):
             lb._shapes = [Line(p, lb.s), *lb._shapes]
 
     if mirror is not None:
-        return lb.add_shape(b123_mirror(lb.wire(), start))
+        assert nstart
+        return lb.add_shape(b123_mirror(lb.wire(), nstart))
 
     return lb.add_shape(Line(lb.e, lb.s))
 
 
 @build_line_op
-def op_trim(lb, point, near_by=None, add=False):
+def op_trim(
+    lb: build_line | None,
+    point: TrimOp | Axis | Vector,
+    near_by: Vector | Shape[Any] | None = None,
+    add: bool = False,
+) -> Mixin1D[Any] | None:
     if not lb:
-        return
+        return None
     s = lb._shapes[-1]
     other = None
-    if isinstance(point, by_tangent):
+    if isinstance(point, TrimOp):
         rv, other = point.trim(lb)
     else:
         if isinstance(point, Axis):
-            ax = point.located(lb.plane.location)
-            point = intersection(s, ax, near_by=near_by)
-            other = Line(point, ax.position)
-        param = param_on_point(s, point)
+            ax: Axis = point.located(lb.plane.location)
+            npoint = intersection(s, ax, near_by=near_by)
+            other = Line(npoint, ax.position)
+        param = param_on_point(s, npoint)
+        assert param
         rv = lb._shapes[-1] = trim_wire(s, end=param)
 
     if other is not None and add:
@@ -476,9 +631,11 @@ def op_trim(lb, point, near_by=None, add=False):
 
 
 @build_line_op
-def op_move(lb, start=None, end=None):
+def op_move(
+    lb: build_line | None, start: VLike | None = None, end: VLike | None = None
+) -> Mixin1D[Any] | None:
     if not lb:
-        return
+        return None
 
     targets = lb.chains()[-1]
     if start is not None:
@@ -491,29 +648,17 @@ def op_move(lb, start=None, end=None):
     for it in targets:
         it.move(pos)
 
-
-class by_tangent:
-    def __init__(self, obj, sort_by=Axis.Y, idx=-1):
-        self.obj = obj
-        self.sort_by = sort_by
-        self.idx = idx
-
-    def trim(self, lb):
-        s = lb._shapes[-1]
-        cl = Line(s.edge().arc_center, self.point)
-        cc = Pos(cl @ 0.5) * Edge.make_circle(cl.length/2)
-        ip = intersection(s, cc, sort_by=self.sort_by, idx=self.idx)
-        param = param_on_point(s, ip)
-        rv = lb._shapes[-1] = trim_wire(s, end=param)
-        return rv, Line(rv @ 1, lb.to_vector(self.obj))
+    return None
 
 
-def _fillet_helper(lb: build_line, count: int, closed: bool) -> tuple[int, list[Vertex], list[Wire]]:
+def _fillet_helper(
+    lb: build_line, count: int, closed: bool
+) -> tuple[int, list[Vertex], list[Wire]]:
     l = len(lb._shapes)
     if closed:
-        assert count <= l, f"vertex count should be less or equal than number of shapes"
+        assert count <= l, f'vertex count should be less or equal than number of shapes'
     else:
-        assert count < l, f"vertex count should be less than number of shapes"
+        assert count < l, f'vertex count should be less than number of shapes'
 
     if closed:
         sidx = l - count
@@ -535,9 +680,11 @@ def _fillet_helper(lb: build_line, count: int, closed: bool) -> tuple[int, list[
 
 
 @build_line_op
-def op_fillet(lb, radius, count=1, closed=False):
+def op_fillet(
+    lb: build_line | None, radius: float, count: int = 1, closed: bool = False
+) -> Mixin1D[Any] | None:
     if not lb:
-        return
+        return None
     sidx, vlist, keep = _fillet_helper(lb, count, closed)
     spoint = lb._shapes[sidx] @ 0
     fobj = fillet(vlist, radius)
@@ -550,9 +697,16 @@ def op_fillet(lb, radius, count=1, closed=False):
 
 
 @build_line_op
-def op_chamfer(lb, length, count=1, length2=None, angle=None, closed=False):
+def op_chamfer(
+    lb: build_line | None,
+    length: float,
+    count: int = 1,
+    length2: float | None = None,
+    angle: float | None = None,
+    closed: bool = False,
+) -> Mixin1D[Any] | None:
     if not lb:
-        return
+        return None
     sidx, vlist, keep = _fillet_helper(lb, count, closed)
     spoint = lb._shapes[sidx] @ 0
     fobj = chamfer(vlist, length=length, length2=length2, angle=angle)

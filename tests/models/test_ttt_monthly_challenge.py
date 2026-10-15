@@ -8,7 +8,8 @@ part mass. It's an easiest way to train your skills.
 
 [ttt-challenges]: https://www.tootalltoby.com/Leaderboard/
 """
-from build123d import *
+from build123d import (Pos, Plane, fillet, Box, Axis, CounterSinkHole, revolve, offset, split,
+    make_face, Keep, PolarLocations, extrude, Side, Part, Vector, make_hull, RectangleRounded)
 from build123d_draft import *
 from pytest import approx
 import pytest
@@ -24,7 +25,7 @@ densc = 7800e-6
 
 @slist
 @pytest.mark.views(None, (0, 70), size=(480, 480))
-def test_24_04_LB1_u_joint_fork():
+def test_24_04_LB1_u_joint_fork() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-04/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/D_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE_-_APRIL.png).
@@ -39,7 +40,7 @@ def test_24_04_LB1_u_joint_fork():
     l2 = build_line(Plane.YZ).append(
         op_arc(15, 17/2-90, start=Y(51)),
         op_line(until=XX(38/2)), YY(0), op_fillet(115),
-        X(5), op_close(Axis.X.offset(Y=60))
+        X(5), op_close(axis_offset(Axis.X, Y=60))
     )
     part -= mirror_add(l2.extrude(100))
 
@@ -61,10 +62,10 @@ def test_24_04_LB1_u_joint_fork():
 
 
 @slist
-def test_22_T_32_pivot_plate():
+def test_22_T_32_pivot_plate() -> Part:
     l = build_line(Plane.XZ).append(
-        Y(2.625-1.5), op_arc(1.5, -180, name='a'),
-        op_trim(Axis.X.offset(4, 1.5), add=True),
+        Y(2.625-1.5), op_arc(1.5, -180).named('a'),
+        op_trim(axis_offset(Axis.X, 4, 1.5), add=True),
         op_fillet(0.75),
         op_close(Axis.X)
     )
@@ -84,7 +85,7 @@ def test_22_T_32_pivot_plate():
 
 @slist
 @pytest.mark.views(None, (-90, 0), size=(480, 480))
-def test_24_05_LB1_clamp_bracket():
+def test_24_05_LB1_clamp_bracket() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-05/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/D_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE_-_MAY.png).
@@ -99,7 +100,7 @@ def test_24_05_LB1_clamp_bracket():
 
     l2 = build_line(Y(33)).append(
         op_arc(33, -180),
-        op_trim(Axis.Y.offset(44/2, -55-15), add=True),
+        op_trim(axis_offset(Axis.Y, 44/2, -55-15), add=True),
         op_fillet(30), op_close(mirror=Axis.Y)
     )
     p2 = l2.extrude(41)
@@ -119,7 +120,7 @@ def test_24_05_LB1_clamp_bracket():
 
 @slist
 @pytest.mark.views((45, 0), (45, 70), size=(480, 480))
-def test_24_05_LB2_chamber():
+def test_24_05_LB2_chamber() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-05/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/E_LEADERBOARD_CHALLENGE_MODEL_2_IMAGE_-_MAY.png).
@@ -152,7 +153,7 @@ def test_24_05_LB2_chamber():
 
 
 @slist
-def test_24_05_LB3_arm_housing():
+def test_24_05_LB3_arm_housing() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-05/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/F_LEADERBOARD_CHALLENGE_MODEL_3_IMAGE_-_MAY.png).
@@ -179,14 +180,14 @@ def test_24_05_LB3_arm_housing():
 
 @slist
 @pytest.mark.views((-90, 0))
-def test_24_07_LB3_adj_base():
+def test_24_07_LB3_adj_base() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-07/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/F_LEADERBOARD_CHALLENGE_MODEL_3_IMAGE_-_JULY.png).
     """
     c1 = X(127) * Circle(d=25)
     c2 = Circle(d=45)
-    c3 = Pos(Vector(1, 0).rot(60) * 127) * Circle(d=25)
+    c3 = Pos(Vector(1, 0).rotate(Axis.Z, 60) * 127) * Circle(d=25)
 
     base_sk = make_hull((c1 + c2).edges()) + make_hull((c2 + c3).edges())
     base_sk = fillet(base_sk.vertices().group_by(Axis.X)[2], 13)
@@ -214,7 +215,7 @@ def test_24_07_LB3_adj_base():
 
 @slist
 @pytest.mark.views((110, 0))
-def test_24_07_LB1_foot_holder():
+def test_24_07_LB1_foot_holder() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-07/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/D_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE_-_JULY.png).
@@ -241,7 +242,7 @@ def test_24_07_LB1_foot_holder():
 
 
 @slist
-def test_24_04_LB2_rod_end_mount():
+def test_24_04_LB2_rod_end_mount() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-04/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/E_LEADERBOARD_CHALLENGE_MODEL_2_IMAGE-APRIL.png).
@@ -277,7 +278,7 @@ def test_24_04_LB2_rod_end_mount():
 
 @slist
 @pytest.mark.views((10, 5), (100, 15))
-def test_24_04_LB3_end_base():
+def test_24_04_LB3_end_base() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-04/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/F_LEADERBOARD_CHALLENGE_MODEL_3_IMAGE_-_APRIL_SS11zYc.png).
@@ -305,7 +306,7 @@ def test_24_04_LB3_end_base():
 
     l = build_line(X(175-30)).append(
         op_line(angle=60, until=YY(52/2)),
-        op_close(Axis.Y.offset(X=230))
+        op_close(axis_offset(Axis.Y, X=230))
     )
     part -= mirror_add(l.extrude(12))
     part -= X(218) * make_slot((218-175)*2, h=30, d=28)
@@ -316,7 +317,7 @@ def test_24_04_LB3_end_base():
 
 @slist
 @pytest.mark.views((15, 10))
-def test_2024_03_10_offset_support():
+def test_2024_03_10_offset_support() -> Part:
     """
     [Source](https://www.tootalltoby.com/leaderboard/2024-03/).
     [Draft](https://www.tootalltoby.com/static/images/2024-03_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE.png).
@@ -324,8 +325,8 @@ def test_2024_03_10_offset_support():
     l = build_line(Plane.XZ).append(
         op_line(start=(69, 10), angle=50, until=XX(80+33)), YY(70),
         op_arc(90, 90, start=(0, 70), tangent=(-1, 0)),
-        op_trim(Axis.X.offset(Y=15)),
-        op_move(end=(0, 15), connect=True),
+        op_trim(axis_offset(Axis.X, Y=15)),
+        op_move(end=(0, 15)).connected,
         op_close(Axis.X)
     )
     part = l.extrude(5, both=True)
@@ -338,7 +339,7 @@ def test_2024_03_10_offset_support():
 
     lc = build_line(Plane.XZ).append(
         op_line(start=XX(12), angle=30, until=Y(5)),
-        op_close(mirror=Axis.Y.offset(69/2)),
+        op_close(mirror=axis_offset(Axis.Y, 69/2)),
     )
     part -= lc.extrude(100, both=True)
 
@@ -347,7 +348,7 @@ def test_2024_03_10_offset_support():
 
 
 @slist
-def test_2024_03_12_side_spacer():
+def test_2024_03_12_side_spacer() -> Part:
     """
     [Source](https://www.tootalltoby.com/leaderboard/2024-03/).
     [Draft](https://www.tootalltoby.com/static/images/2024-03_LEADERBOARD_CHALLENGE_MODEL_3_IMAGE.png).
@@ -355,11 +356,11 @@ def test_2024_03_12_side_spacer():
 
     l = build_line().append(
         op_arc(50, 90, start=X(60+50), tangent=(0, 1)),
-        op_trim(Axis.X.offset(Y=40)),
+        op_trim(axis_offset(Axis.X, Y=40)),
         op_line(tangent=(1, 0), angle=15, until=XX(60+196)),
         op_drop(), op_close(mirror=Axis.X)
     )
-    part = l.extrude(20)
+    part: Part = l.extrude(20)
 
     c = X(60+196) * Cylinder(35, r=95, align=A.d)
     part = part + c - c.new(r=75)
