@@ -10,7 +10,9 @@ from typing import (
     ParamSpec,
     Concatenate,
     Literal,
-    Iterator
+    Iterator,
+    TypeGuard,
+    assert_type,
 )
 
 from build123d import BuildLine, Sketch, Part
@@ -41,8 +43,10 @@ from .utils import (
 from .tools import make_axis, intersection, PPos, param_on_point, trim_wire, reversed_wire
 
 __all__ = [
+    'Angle',
     'build_line',
     'build_line_op',
+    'Dir',
     'Op',
     'op_arc',
     'op_chamfer',
@@ -55,6 +59,7 @@ __all__ = [
     'op_move',
     'op_start',
     'op_trim',
+    'PDir',
     'TrimOp',
 ]
 
@@ -63,6 +68,14 @@ VLike = Vector | Pos | PPos | Axis | tuple[float, ...]
 TLike = Vector | Pos | Axis | tuple[float, ...]
 BuildLineOp: TypeAlias = Vector | Pos | tuple[float, ...] | Shape[Any] | 'Op'
 UntilType = Curve | Edge | Wire | Axis | Plane | Pos
+
+
+def is_vlike(obj: object) -> TypeGuard[VLike]:
+    return isinstance(obj, (Vector, Pos, PPos, Axis, tuple))
+
+
+def is_point_like(obj: object) -> TypeGuard[Vector | tuple[float, ...]]:
+    return isinstance(obj, (Vector, tuple))
 
 
 class TrimOp:
@@ -344,63 +357,74 @@ def op_start(
         lb._start_tangent = lb.to_direction(tangent)
 
 
-# @overload
-# def op_line(*, dir: TLike, length: float) -> Op: ...
-# @overload
-# def op_line(*, dir: TLike, until: UntilType) -> Op: ...
+@dataclass
+class Angle:
+    angle: float
+
+
+class Dir:
+    direction: TLike
+
+    def __init__(self, X: float | TLike = 0, Y: float = 0, Z: float = 0, angle: float = 0) -> None:
+        self.angle = angle
+        if isinstance(X, (float, int)):
+            self.direction = Vector(X, Y, Z)
+        else:
+            self.direction = X
+
+    def localize(self, lb: build_line) -> Vector:
+        tangent = lb.to_direction(self.direction)
+        if self.angle != 0:
+            return tangent.rotate(make_axis(lb.plane), self.angle)
+        return tangent
+
+
+class PDir:
+    position: VLike
+    direction: Dir
+
+    def __init__(self, position: VLike, direction: TLike | None = None, angle: float = 0) -> None:
+        self.position = position
+        self.direction = Dir(direction or (1, 0, 0), angle=angle)
+
+
+def _parse_start(
+    lb: build_line,
+    start: VLike | Dir | PDir | Angle | None = None,
+) -> tuple[Vector, Vector | None]:
+    if start is None:
+        return lb.e, lb.tangent()
+
+    if isinstance(start, Dir):
+        return lb.e, start.localize(lb)
+    elif isinstance(start, PDir):
+        return lb.to_vector(start.position), start.direction.localize(lb)
+    elif isinstance(start, Angle):
+        return lb.e, lb.tangent().rotate(make_axis(lb.plane), start.angle)
+
+    return lb.to_vector(start), lb.to_direction((1, 0, 0))
 
 
 @build_line_op
 def op_line(
     lb: build_line | None,
-    length: float | None = None,
-    angle: float | None = None,
-    dir: TLike | None = None,
-    start: VLike | None = None,
-    to: VLike | None = None,
-    until: UntilType | None = None,
-    tangent: TLike | None = None,
+    end: float | VLike | UntilType,
+    start: VLike | Dir | PDir | Angle | None = None,
 ) -> Mixin1D[Any] | None:
     if lb is None:
-        assert_args(
-            locals(),
-            ['dir', ('length', 'until')],
-            ['angle', ('length', 'until')],
-            ['to', (None, 'length', 'until')],
-            [('length', 'until'), '-dir', '-angle', '-to'],
-        )
         return None
 
-    reset_tangent = False
-    if start is None:
-        start = lb.e
-    else:
-        reset_tangent = True
-        start = lb.to_vector(start)
+    nstart, tangent = _parse_start(lb, start)
+    assert tangent
 
-    if to is not None and not _defined(length, until):
-        return lb.add_shape(Line(start, lb.to_vector(to, start)))
+    if isinstance(end, (float, int)):
+        return lb.add_shape(Line(nstart, nstart + tangent.normalized() * end))
 
-    if dir is None:
-        if to is not None:
-            dir = lb.to_vector(to, start) - start
-        else:
-            if tangent is None:
-                if reset_tangent:
-                    tangent = lb.plane.x_dir
-                else:
-                    tangent = lb.tangent()
-            else:
-                tangent = lb.to_direction(tangent)
-            dir = tangent.rotate(make_axis(lb.plane), angle or 0)
-    else:
-        dir = lb.to_direction(dir)
+    if is_point_like(end):
+        return lb.add_shape(Line(nstart, lb.to_vector(end, nstart)))
 
-    if length is not None:
-        return lb.add_shape(Line(start, start + dir * length))
-
-    assert until
-    return lb.add_shape(_until_helper(lb, start, dir, until))
+    nend: UntilType = end  # type: ignore[assignment]
+    return lb.add_shape(_until_helper(lb, nstart, tangent, nend))
 
 
 def _until_helper(lb: build_line, start: Vector, dir: Vector, until: UntilType) -> BaseEdgeObject:

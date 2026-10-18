@@ -68,7 +68,7 @@ def test_lstop_simple() -> Part:
     part = part + s - s.center_locs * cbore_d(25, 12, 13, 30)
 
     lr = build_line(Plane.XZ).append(
-        op_line(angle=90-15, until=YY(65)), op_close(XX(25))
+        op_line(start=Angle(90-15), end=YY(65)), op_close(XX(25))
     )
     rib = lr.extrude(85/2, both=True)
 

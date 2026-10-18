@@ -39,7 +39,7 @@ def test_24_04_LB1_u_joint_fork() -> Part:
 
     l2 = build_line(Plane.YZ).append(
         op_arc(15, 17/2-90, start=Y(51)),
-        op_line(until=XX(38/2)), YY(0), op_fillet(115),
+        op_line(end=XX(38/2)), YY(0), op_fillet(115),
         X(5), op_close(axis_offset(Axis.X, Y=60))
     )
     part -= mirror_add(l2.extrude(100))
@@ -91,8 +91,8 @@ def test_24_05_LB1_clamp_bracket() -> Part:
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/D_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE_-_MAY.png).
     """
     l1 = build_line((-133/2, 12)).append(
-        op_line(angle=19, tangent=(1, 0), until=XX(0)),
-        op_line(angle=-19, tangent=(1, 0), until=XX(133/2)),
+        op_line(start=Dir((1, 0), angle=19), end=XX(0)),
+        op_line(start=Dir((1, 0), angle=-19), end=XX(133/2)),
         op_fillet(33), op_close(mirror=Axis.X)
     )
     p1 = l1.extrude(20)
@@ -126,7 +126,7 @@ def test_24_05_LB2_chamber() -> Part:
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/E_LEADERBOARD_CHALLENGE_MODEL_2_IMAGE_-_MAY.png).
     """
     l = build_line((5.5/2, 3.5), Plane.XZ, Y(-1)).append(
-        op_line(angle=-10, until=YY(0.75)), XX(0)
+        op_line(start=Angle(-10), end=YY(0.75)), XX(0)
     )
     sk = offset(l.wire(), 0.375, side=Side.RIGHT)
 
@@ -228,7 +228,7 @@ def test_24_07_LB1_foot_holder() -> Part:
     part -= Z(18) * loc * make_slot(62, h=66-18, r=42-12)
 
     l = build_line(Plane.XZ).append(
-        op_line(start=Pos(-52, 18), angle=45, until=YY(66)),
+        op_line(start=PDir((-52, 18), angle=45), end=YY(66)),
         op_close(Plane.YZ.offset(-200))
     )
     part -= l.extrude(100, both=True)
@@ -255,7 +255,7 @@ def test_24_04_LB2_rod_end_mount() -> Part:
 
     r = 2.25/2
     l1 = build_line(Pos(r, 1.5/2-0.01), Plane.XZ).append(
-        op_line(angle=-10, until=YY(0)),
+        op_line(start=Angle(-10), end=YY(0)),
         op_extend(start=YY(1.5/2-0.001)),
         op_close(mirror=Axis.X),
     )
@@ -263,7 +263,7 @@ def test_24_04_LB2_rod_end_mount() -> Part:
 
     l2 = build_line().append(
         op_arc(r, -14, start=Y(r)),
-        op_line(until=YY(0)),
+        op_line(end=YY(0)),
         op_drop(),
         op_close(mirror=Axis.X),
     )
@@ -286,7 +286,7 @@ def test_24_04_LB3_end_base() -> Part:
 
     l = build_line(Pos(218, 22), Plane.XZ).append(
         XX(175-25),
-        op_line(angle=25, until=YY(14)),
+        op_line(start=Angle(25), end=YY(14)),
         XX(22), YY(88), XX(0),
         op_close(Axis.X)
     )
@@ -294,7 +294,7 @@ def test_24_04_LB3_end_base() -> Part:
     part = split(part, Plane.XZ.moved(Pos(188, 0, -50)).rotated((0, 0, -45)))
 
     l = build_line(plane=Plane.XZ.offset(-50)).append(
-        op_line(start=(22, 88), to=(188, 22)),
+        op_line(start=(22, 88), end=(188, 22)),
         op_close(Axis.X)
     )
     part += l.extrude(8)
@@ -305,7 +305,7 @@ def test_24_04_LB3_end_base() -> Part:
     part -= Z(88-24) * R.X * make_slot(14, h=30, r=9, rotation=90)
 
     l = build_line(X(175-30)).append(
-        op_line(angle=60, until=YY(52/2)),
+        op_line(start=Angle(60), end=YY(52/2)),
         op_close(axis_offset(Axis.Y, X=230))
     )
     part -= mirror_add(l.extrude(12))
@@ -323,7 +323,7 @@ def test_2024_03_10_offset_support() -> Part:
     [Draft](https://www.tootalltoby.com/static/images/2024-03_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE.png).
     """
     l = build_line(Plane.XZ).append(
-        op_line(start=(69, 10), angle=50, until=XX(80+33)), YY(70),
+        op_line(start=PDir((69, 10), angle=50), end=XX(80+33)), YY(70),
         op_arc(90, 90, start=(0, 70), tangent=(-1, 0)),
         op_trim(axis_offset(Axis.X, Y=15)),
         op_move(end=(0, 15)).connected,
@@ -338,7 +338,7 @@ def test_2024_03_10_offset_support() -> Part:
     part -= mirror_add(Pos(33, 40/2) * Cylinder(15, d=12, align=A.d))
 
     lc = build_line(Plane.XZ).append(
-        op_line(start=XX(12), angle=30, until=Y(5)),
+        op_line(start=PDir(XX(12), angle=30), end=Y(5)),
         op_close(mirror=axis_offset(Axis.Y, 69/2)),
     )
     part -= lc.extrude(100, both=True)
@@ -357,7 +357,7 @@ def test_2024_03_12_side_spacer() -> Part:
     l = build_line().append(
         op_arc(50, 90, start=X(60+50), tangent=(0, 1)),
         op_trim(axis_offset(Axis.X, Y=40)),
-        op_line(tangent=(1, 0), angle=15, until=XX(60+196)),
+        op_line(start=Dir((1, 0), angle=15), end=XX(60+196)),
         op_drop(), op_close(mirror=Axis.X)
     )
     part: Part = l.extrude(20)
@@ -376,7 +376,7 @@ def test_2024_03_12_side_spacer() -> Part:
         33/2, 33/2+8, 50, 90))
 
     l = build_line(Plane.XZ).append(
-        op_line(start=Pos(60+50, 80-20), angle=-30, until=XX(60+196-95)),
+        op_line(start=PDir(Pos(60+50, 80-20), angle=-30), end=XX(60+196-95)),
         op_extend(5, 5), op_close(Axis.X)
     )
     part += l.extrude(6, both=True)

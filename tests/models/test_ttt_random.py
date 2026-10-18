@@ -65,7 +65,7 @@ def test_24WC_12_tube_plug() -> Part:
 
     cl = build_line(Plane.XZ).append(
         op_start((150, 75/2), -Axis.X),
-        op_line(angle=44/2, until=YY(20)), op_close(Axis.X))
+        op_line(start=Angle(44/2), end=YY(20)), op_close(Axis.X))
     cone = cl.revolvex()
     part -= cone
 

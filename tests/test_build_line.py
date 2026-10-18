@@ -33,8 +33,8 @@ def assert_cont_edges(edges: list[Edge], *points: Vector) -> None:
 
 def test_trim() -> None:
     l = build_line().append(
-        op_line(start=XX(10), to=XX(5)),
-        op_line(to=XX(0))
+        op_line(start=XX(10), end=XX(5)),
+        op_line(end=XX(0))
     )
 
     # direct wire

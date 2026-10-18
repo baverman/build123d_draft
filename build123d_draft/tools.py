@@ -452,7 +452,9 @@ class PPos(Pos):
         return Vector(*r)
 
 
-def axis_offset(axis: Axis, X: float | Vector | tuple[float, ...] = 0, Y: float = 0, Z: float = 0) -> Axis:
+def axis_offset(
+    axis: Axis, X: float | Vector | tuple[float, ...] = 0, Y: float = 0, Z: float = 0
+) -> Axis:
     if isinstance(X, (tuple, Vector)):
         v = X
     else:

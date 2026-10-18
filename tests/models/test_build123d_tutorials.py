@@ -39,7 +39,7 @@ def test_ppack_01_01() -> Part:
     part -= X(115-10) * make_slot(90, h=15, center=False, d=12, align=A.e)
 
     tl = build_line(X(9), Plane.YZ).append(
-        op_line(angle=60, until=Y(8)), op_close(mirror=Axis.Y)
+        op_line(start=Angle(60), end=Y(8)), op_close(mirror=Axis.Y)
     )
     part -= tl.extrude(115)
 
@@ -66,7 +66,7 @@ def test_ppack_01_02() -> Part:
     part = fillet(edges, 1)
 
     il = build_line(X(42/2), Plane.XZ).append(
-        op_line(angle=94, until=Y(37)),
+        op_line(start=Angle(94), end=Y(37)),
         XX(0),
         op_fillet(3),
         op_close(Axis.Y)
@@ -126,7 +126,7 @@ def test_ppack_01_04() -> Part:
 def test_ppack_01_06() -> Part:
     l = build_line((44/2, 69-15)).append(
         op_arc(10, -45-90).named('a'),
-        op_line(until=XX(15)), YY(0), op_fillet(12),
+        op_line(end=XX(15)), YY(0), op_fillet(12),
         op_close(Axis.Y)
     )
 
@@ -150,8 +150,8 @@ def test_ppack_01_06() -> Part:
 @pytest.mark.views((10, 0))
 def test_ppack_01_09() -> Part:
     cl = build_line(Plane.XZ).append(
-        op_line(angle=-45, until=YY(-45)),
-        op_line(6, 90), op_line(angle=90, until=XX(0)).named('l'),
+        op_line(start=Angle(-45), end=YY(-45)),
+        op_line(6, start=Angle(90)), op_line(start=Angle(90), end=XX(0)).named('l'),
     )
 
     p1 = split(make_slot(cl.l.length*2, h=-6, center=False, d=75),
@@ -160,7 +160,7 @@ def test_ppack_01_09() -> Part:
     p1 = cl.normal_loc(tangent=-1) * p1
 
     l2 = build_line(Y(60), Plane.YZ).append(
-        op_arc(15, 75/2-90), op_line(until=XX(75/2)),
+        op_arc(15, 75/2-90), op_line(end=XX(75/2)),
         YY(0), op_close(Axis.Y)
     )
     p2 = mirror_add(l2.extrude(-13))
@@ -186,7 +186,7 @@ def test_23_T_24_curved_support() -> Part:
 
     l = build_line(Plane.XZ).append(
         op_arc(30, 90-8, center=(77-r1, 0)),
-        op_line(until=XX(r1)),
+        op_line(end=XX(r1)),
         op_move(end=YY(50)),
         op_extend(end=5).reversed,
         op_trim(axis_offset(Axis.X, (125, 32)), add=True),
