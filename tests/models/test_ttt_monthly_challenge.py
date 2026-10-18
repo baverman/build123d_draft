@@ -228,7 +228,7 @@ def test_24_07_LB1_foot_holder() -> Part:
     part -= Z(18) * loc * make_slot(62, h=66-18, r=42-12)
 
     l = build_line(Plane.XZ).append(
-        op_line(start=PDir((-52, 18), angle=45), end=YY(66)),
+        op_line(start=At((-52, 18), angle=45), end=YY(66)),
         op_close(Plane.YZ.offset(-200))
     )
     part -= l.extrude(100, both=True)
@@ -323,7 +323,7 @@ def test_2024_03_10_offset_support() -> Part:
     [Draft](https://www.tootalltoby.com/static/images/2024-03_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE.png).
     """
     l = build_line(Plane.XZ).append(
-        op_line(start=PDir((69, 10), angle=50), end=XX(80+33)), YY(70),
+        op_line(start=At((69, 10), angle=50), end=XX(80+33)), YY(70),
         op_arc(90, 90, start=(0, 70), tangent=(-1, 0)),
         op_trim(axis_offset(Axis.X, Y=15)),
         op_move(end=(0, 15)).connected,
@@ -338,7 +338,7 @@ def test_2024_03_10_offset_support() -> Part:
     part -= mirror_add(Pos(33, 40/2) * Cylinder(15, d=12, align=A.d))
 
     lc = build_line(Plane.XZ).append(
-        op_line(start=PDir(XX(12), angle=30), end=Y(5)),
+        op_line(start=At(XX(12), angle=30), end=Y(5)),
         op_close(mirror=axis_offset(Axis.Y, 69/2)),
     )
     part -= lc.extrude(100, both=True)
@@ -376,7 +376,7 @@ def test_2024_03_12_side_spacer() -> Part:
         33/2, 33/2+8, 50, 90))
 
     l = build_line(Plane.XZ).append(
-        op_line(start=PDir(Pos(60+50, 80-20), angle=-30), end=XX(60+196-95)),
+        op_line(start=At(Pos(60+50, 80-20), angle=-30), end=XX(60+196-95)),
         op_extend(5, 5), op_close(Axis.X)
     )
     part += l.extrude(6, both=True)

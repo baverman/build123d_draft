@@ -44,6 +44,7 @@ from .tools import make_axis, intersection, PPos, param_on_point, trim_wire, rev
 
 __all__ = [
     'Angle',
+    'At',
     'build_line',
     'build_line_op',
     'Dir',
@@ -59,7 +60,6 @@ __all__ = [
     'op_move',
     'op_start',
     'op_trim',
-    'PDir',
     'TrimOp',
 ]
 
@@ -365,10 +365,10 @@ class Angle:
 class Dir:
     direction: TLike
 
-    def __init__(self, X: float | TLike = 0, Y: float = 0, Z: float = 0, angle: float = 0) -> None:
+    def __init__(self, X: float | TLike = 1, Y: float = 0, Z: float = 0, angle: float = 0) -> None:
         self.angle = angle
         if isinstance(X, (float, int)):
-            self.direction = Vector(X, Y, Z)
+            self.direction = (X, Y, Z)
         else:
             self.direction = X
 
@@ -379,7 +379,7 @@ class Dir:
         return tangent
 
 
-class PDir:
+class At:
     position: VLike
     direction: Dir
 
@@ -390,14 +390,14 @@ class PDir:
 
 def _parse_start(
     lb: build_line,
-    start: VLike | Dir | PDir | Angle | None = None,
+    start: VLike | Dir | At | Angle | None = None,
 ) -> tuple[Vector, Vector | None]:
     if start is None:
         return lb.e, lb.tangent()
 
     if isinstance(start, Dir):
         return lb.e, start.localize(lb)
-    elif isinstance(start, PDir):
+    elif isinstance(start, At):
         return lb.to_vector(start.position), start.direction.localize(lb)
     elif isinstance(start, Angle):
         return lb.e, lb.tangent().rotate(make_axis(lb.plane), start.angle)
@@ -409,7 +409,7 @@ def _parse_start(
 def op_line(
     lb: build_line | None,
     end: float | VLike | UntilType,
-    start: VLike | Dir | PDir | Angle | None = None,
+    start: VLike | Dir | At | Angle | None = None,
 ) -> Mixin1D[Any] | None:
     if lb is None:
         return None
