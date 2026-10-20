@@ -38,7 +38,7 @@ def test_24_04_LB1_u_joint_fork() -> Part:
     part = l1.extrude(38/2+1, both=True) # +1 to give space for fillet
 
     l2 = build_line(Plane.YZ).append(
-        op_arc(15, 17/2-90, start=Y(51)),
+        op_arc(start=Y(51), end=17/2-90, r=-15),
         op_line(end=XX(38/2)), YY(0), op_fillet(115),
         X(5), op_close(axis_offset(Axis.X, Y=60))
     )
@@ -64,7 +64,7 @@ def test_24_04_LB1_u_joint_fork() -> Part:
 @slist
 def test_22_T_32_pivot_plate() -> Part:
     l = build_line(Plane.XZ).append(
-        Y(2.625-1.5), op_arc(1.5, -180).named('a'),
+        Y(2.625-1.5), op_arc(-180, d=-3).named('a'),
         op_trim(axis_offset(Axis.X, 4, 1.5), add=True),
         op_fillet(0.75),
         op_close(Axis.X)
@@ -99,7 +99,7 @@ def test_24_05_LB1_clamp_bracket() -> Part:
     p1 -= mirror_add(Pos(99/2, Z=20) * cbore(12, 5, 6, 20), Plane.YZ)
 
     l2 = build_line(Y(33)).append(
-        op_arc(33, -180),
+        op_arc(-180, r=-33),
         op_trim(axis_offset(Axis.Y, 44/2, -55-15), add=True),
         op_fillet(30), op_close(mirror=Axis.Y)
     )
@@ -262,7 +262,7 @@ def test_24_04_LB2_rod_end_mount() -> Part:
     part += l1.extrude(.25/2, both=True)
 
     l2 = build_line().append(
-        op_arc(r, -14, start=Y(r)),
+        op_arc(start=Y(r), end=-14, r=-r),
         op_line(end=YY(0)),
         op_drop(),
         op_close(mirror=Axis.X),
@@ -324,7 +324,7 @@ def test_2024_03_10_offset_support() -> Part:
     """
     l = build_line(Plane.XZ).append(
         op_line(start=At((69, 10), angle=50), end=XX(80+33)), YY(70),
-        op_arc(90, 90, start=(0, 70), tangent=(-1, 0)),
+        op_arc(start=At((0, 70), (-1, 0)), end=90, r=90),
         op_trim(axis_offset(Axis.X, Y=15)),
         op_move(end=(0, 15)).connected,
         op_close(Axis.X)
@@ -355,7 +355,7 @@ def test_2024_03_12_side_spacer() -> Part:
     """
 
     l = build_line().append(
-        op_arc(50, 90, start=X(60+50), tangent=(0, 1)),
+        op_arc(start=At(X(60+50), (0, 1)), end=90, r=50),
         op_trim(axis_offset(Axis.X, Y=40)),
         op_line(start=Dir((1, 0), angle=15), end=XX(60+196)),
         op_drop(), op_close(mirror=Axis.X)

@@ -22,7 +22,7 @@ densc = 7800e-6
 def _test_model1() -> Part:
     l = build_line(Plane.XZ).append(
         YY(55), X(20), YY(9), XX(155), Y(-9),
-        op_arc(560, to=(0, 0), tangent=False)
+        op_arc(start=Dir(FREE), end=(0, 0), r=560)
     )
 
     base = l.extrude(-60)

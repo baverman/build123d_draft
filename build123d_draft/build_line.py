@@ -15,7 +15,7 @@ from typing import (
     assert_type,
 )
 
-from build123d import BuildLine, Sketch, Part
+from build123d import BuildLine, Sketch, Part, AngularDirection
 from build123d.geometry import Plane, Axis, Pos, Vector, Location, VectorLike
 from build123d.topology import Shape, ShapeList, Wire, Edge, Vertex
 from build123d.topology.shape_core import TOPODS
@@ -40,14 +40,22 @@ from .utils import (
     assert_args,
     debug,
 )
-from .tools import make_axis, intersection, PPos, param_on_point, trim_wire, reversed_wire
+from .tools import (
+    make_axis,
+    intersection,
+    PPos,
+    param_on_point,
+    trim_wire,
+    reversed_wire,
+    radius_arc,
+)
 
 __all__ = [
     'Angle',
     'At',
     'build_line',
-    'build_line_op',
     'Dir',
+    'FREE',
     'Op',
     'op_arc',
     'op_chamfer',
@@ -357,65 +365,111 @@ def op_start(
         lb._start_tangent = lb.to_direction(tangent)
 
 
+class Free:
+    pass
+
+
+FREE = Free()
+
+
 @dataclass
 class Angle:
     angle: float
 
 
 class Dir:
-    direction: TLike
+    direction: TLike | Free
 
-    def __init__(self, X: float | TLike = 1, Y: float = 0, Z: float = 0, angle: float = 0) -> None:
+    def __init__(
+        self, X: float | TLike | Free = 1, Y: float = 0, Z: float = 0, angle: float | None = None
+    ) -> None:
         self.angle = angle
         if isinstance(X, (float, int)):
             self.direction = (X, Y, Z)
         else:
             self.direction = X
 
-    def localize(self, lb: build_line) -> Vector:
+    def localize(self, lb: build_line) -> Vector | None:
+        if isinstance(self.direction, Free):
+            return None
+
         tangent = lb.to_direction(self.direction)
-        if self.angle != 0:
+        if self.angle is not None:
             return tangent.rotate(make_axis(lb.plane), self.angle)
         return tangent
 
+    def __repr__(self) -> str:
+        return f'Dir({self.direction}, angle={self.angle})'
 
+
+@dataclass
 class At:
-    position: VLike
-    direction: Dir
+    position: VLike | Free | None = None
+    direction: TLike | Free | None = None
+    angle: float | None = None
 
-    def __init__(self, position: VLike, direction: TLike | None = None, angle: float = 0) -> None:
-        self.position = position
-        self.direction = Dir(direction or (1, 0, 0), angle=angle)
+    @staticmethod
+    def parse(
+        lb: build_line,
+        desc: VLike | AtDir | Free | None,
+        default: tuple[Vector | Free, Vector | Free],
+        default_refdir: Vector,
+    ) -> tuple[Vector | None, Vector | None]:
+        position: VLike | Free | None = None
+        direction: TLike | Free | None = None
+        angle: float | None = None
+
+        if isinstance(desc, Dir):
+            direction, angle = desc.direction, desc.angle
+        elif isinstance(desc, At):
+            position, direction, angle = desc.position, desc.direction, desc.angle
+        elif isinstance(desc, Angle):
+            angle = desc.angle
+        elif isinstance(desc, Free):
+            return None, None
+        elif desc is not None:
+            position = desc
+
+        if position is None:
+            position = default[0]
+
+        if direction is None and angle is None:
+            direction = default[1]
+
+        if isinstance(position, Free):
+            npos = None
+        else:
+            npos = lb.to_vector(position)
+
+        if isinstance(direction, Free):
+            ndir = None
+        else:
+            if direction is None and angle is not None:
+                # t = default_refdir if isinstance(default[1], Free) else default[1]
+                ndir = default_refdir.rotate(make_axis(lb.plane), angle)
+            else:
+                assert direction
+                ndir = Dir(direction, angle=angle).localize(lb)
+
+        return npos, ndir
 
 
-def _parse_start(
-    lb: build_line,
-    start: VLike | Dir | At | Angle | None = None,
-) -> tuple[Vector, Vector | None]:
-    if start is None:
-        return lb.e, lb.tangent()
-
-    if isinstance(start, Dir):
-        return lb.e, start.localize(lb)
-    elif isinstance(start, At):
-        return lb.to_vector(start.position), start.direction.localize(lb)
-    elif isinstance(start, Angle):
-        return lb.e, lb.tangent().rotate(make_axis(lb.plane), start.angle)
-
-    return lb.to_vector(start), lb.to_direction((1, 0, 0))
+AtDir = At | Dir | Angle
 
 
 @build_line_op
 def op_line(
     lb: build_line | None,
     end: float | VLike | UntilType,
-    start: VLike | Dir | At | Angle | None = None,
+    start: VLike | AtDir | None = None,
 ) -> Mixin1D[Any] | None:
     if lb is None:
         return None
 
-    nstart, tangent = _parse_start(lb, start)
-    assert tangent
+    lbt = lb.tangent()
+    nstart, tangent = At.parse(lb, start, (lb.e, lbt), lbt)
+    assert nstart is not None
+    assert tangent is not None
 
     if isinstance(end, (float, int)):
         return lb.add_shape(Line(nstart, nstart + tangent.normalized() * end))
@@ -472,73 +526,86 @@ def op_extend(
     return l
 
 
+ArcParam = Literal['start_point', 'start_tangent', 'end_point', 'end_tangent', 'center', 'radius']
+_RADIUS_ARC = frozenset[ArcParam]({'start_point', 'end_point', 'radius'})
+_JERN_ARC = frozenset[ArcParam]({'start_point', 'start_tangent', 'end_point'})
+_END_TANGENT_ARC = frozenset[ArcParam]({'start_point', 'radius', 'end_tangent', 'start_tangent'})
+_CENTER_ARC = frozenset[ArcParam]({'end_tangent', 'radius', 'center', 'start_tangent'})
+
+
+def set_arc_param(params: set[ArcParam], obj: object, name: ArcParam) -> None:
+    if obj is not None:
+        params.add(name)
+
+
 @build_line_op
 def op_arc(
     lb: build_line | None,
-    radius: float | None = None,
-    size: float | None = None,
-    to: VLike | None = None,
-    tangent: TLike | bool = True,
-    short: bool = True,
+    end: float | VLike | AtDir | Free = FREE,
+    start: float | VLike | AtDir | None = None,
+    r: float | None = None,
+    d: float | None = None,
     center: VLike | None = None,
-    start_angle: float | None = None,
-    start: VLike | None = None,
+    short: bool = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
-        assert_args(
-            locals(),
-            ['radius', 'size', '+tangent', '-center', '-to'],
-            ['to', '+tangent', '-center', '-radius', '-size'],
-            ['to', 'radius', '!tangent', '-center'],
-            ['center', 'radius', 'size', (None, 'start_angle'), '-to'],
-        )
         return None
 
-    if start is None:
-        e = lb.e
-    else:
-        e = lb.to_vector(start)
+    params = set[ArcParam]()
 
-    if tangent is True:
-        tangent = lb.tangent()
-    elif tangent is not None and tangent is not False:
-        tangent = lb.to_direction(tangent)
+    if d is not None:
+        r = d / 2
+    set_arc_param(params, r, 'radius')
 
-    if _defined_all(radius, size) and center is None:
-        # JernArc, reimplemented
+    ncenter = lb.to_vector(center) if center is not None else None
+    set_arc_param(params, ncenter, 'center')
+
+    lbt = lb.tangent()
+
+    if isinstance(start, (float, int)):
+        start = Angle(start)
+
+    if isinstance(end, (float, int)):
+        end = Angle(end)
+
+    spoint, sdir = At.parse(lb, start, (lb.e, lbt), lbt)
+    if 'center' in params:
+        spoint = None
+    set_arc_param(params, spoint, 'start_point')
+    set_arc_param(params, sdir, 'start_tangent')
+
+    epoint, edir = At.parse(lb, end, (FREE, FREE), sdir or lbt)
+    if 'center' in params:
+        epoint = None
+    set_arc_param(params, epoint, 'end_point')
+    set_arc_param(params, edir, 'end_tangent')
+
+    # convert params to known constructions
+    if params == _END_TANGENT_ARC:
+        assert spoint is not None and sdir is not None and r is not None and edir is not None
         ax = make_axis(lb.plane)
-        n = tangent.rotate(ax, math.copysign(90, size))  # type: ignore[union-attr,arg-type]
-        c = e + n.normalized() * radius  # type: ignore[operator]
-        ep = c + (e - c).rotate(ax, size)  # type: ignore[arg-type,operator]
-        return lb.add_shape(BaseEdgeObject(Edge.make_tangent_arc(e, tangent, ep)))  # type: ignore[arg-type]
-    elif _defined(to) and tangent:
-        with lb._builder:
-            TangentArc(
-                lb.to_local_vector(e),
-                lb.to_local_vector(lb.to_vector(to, e)),  # type: ignore[arg-type]
-                tangent=lb.to_local_vector(tangent),
-            )
-        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))  # type: ignore[union-attr]
-    elif _defined_all(to, radius) and not tangent:
-        with lb._builder:
-            RadiusArc(
-                lb.to_local_vector(e),
-                lb.to_local_vector(lb.to_vector(to, e)),  # type: ignore[arg-type]
-                radius,  # type: ignore[arg-type]
-                short_sagitta=short,
-            )
-        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))  # type: ignore[union-attr]
-    elif _defined_all(center, radius, size):
-        start_angle = start_angle or 0
-        if center is True:  # type: ignore[comparison-overlap]
-            center = lb.e
-        else:
-            center = lb.to_vector(center, e)  # type: ignore[arg-type]
-        with lb._builder:
-            CenterArc(lb.to_local_vector(center), radius, start_angle, size)  # type: ignore[arg-type]
-        return lb.add_shape(BaseEdgeObject(lb._builder.line.edges()[0]))  # type: ignore[union-attr]
+        s2c = sdir.rotate(ax, math.copysign(90, r)).normalized()
+        c = spoint + s2c * abs(r)
+        c2e = edir.rotate(ax, -math.copysign(90, r)).normalized()
+        epoint = c + c2e * abs(r)
+        params = set(_JERN_ARC)
+    elif params == _CENTER_ARC:
+        assert sdir is not None and edir is not None and r is not None and ncenter is not None
+        ax = make_axis(lb.plane)
+        spoint = ncenter + sdir.normalized() * abs(r)
+        sdir = sdir.rotate(ax, math.copysign(90, r))
+        epoint = ncenter + edir.normalized() * abs(r)
+        params = set(_JERN_ARC)
 
-    assert False
+    # construct actual edges
+    if params == _RADIUS_ARC:
+        assert spoint is not None and epoint is not None and r is not None
+        return lb.add_shape(radius_arc(lb.plane, spoint, epoint, r, short=short))
+    elif params == _JERN_ARC:
+        assert spoint is not None and sdir is not None and epoint is not None
+        return lb.add_shape(Edge.make_tangent_arc(spoint, sdir, epoint))
+
+    raise ValueError(f'Invalid input params: {params}')
 
 
 @build_line_op
