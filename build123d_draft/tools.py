@@ -1,4 +1,5 @@
 import functools
+import math
 from typing import Any, Collection, Sequence, Iterable
 
 import OCP  # type: ignore[import-untyped]
@@ -460,3 +461,27 @@ def axis_offset(
     else:
         v = Vector(X, Y, Z)
     return Axis(axis.position + v, axis.direction)
+
+
+def sagitta_arc(plane: Plane, start: Vector, end: Vector, sagitta: float) -> Edge:
+    mid_point = (end + start) * 0.5
+    sagitta_vector: Vector = (end - start).normalized() * abs(sagitta)
+    sagitta_vector = sagitta_vector.rotate(make_axis(plane), 90 if sagitta > 0 else -90)
+    sag_point = mid_point + sagitta_vector
+    return Edge.make_three_point_arc(start, sag_point, end)
+
+
+def radius_arc(plane: Plane, start: Vector, end: Vector, radius: float, short: bool = True) -> Edge:
+    length = end.sub(start).length / 2.0
+    try:
+        if short:
+            sagitta = abs(radius) - math.sqrt(radius**2 - length**2)
+        else:
+            sagitta = -abs(radius) - math.sqrt(radius**2 - length**2)
+    except ValueError as exception:
+        raise ValueError('Arc radius is not large enough to reach the end point.') from exception
+
+    if radius > 0:
+        return sagitta_arc(plane, start, end, sagitta)
+    else:
+        return sagitta_arc(plane, start, end, -sagitta)

@@ -25,7 +25,7 @@ densc = 7800e-6
 def test_ppack_01_01() -> Part:
     l = build_line(Plane.XZ.offset(25)).append(
         Y(42),
-        op_arc(26, -180).named('a'),
+        op_arc(-180, r=26).named('a'),
         YY(15),
         X(30),
         op_fillet(9),
@@ -59,7 +59,7 @@ def test_ppack_01_02() -> Part:
     base = l.revolvey()
 
     hl = build_line(Plane.XZ).append(
-        op_arc(17, 180, center=(-15, 20), start_angle=90))
+        op_old_arc(17, 180, center=(-15, 20), start_angle=90))
     handle = hl.sweep(Ellipse(2, 5))
 
     _, edges = new_edges_add(handle, base)
@@ -125,7 +125,7 @@ def test_ppack_01_04() -> Part:
 @slist
 def test_ppack_01_06() -> Part:
     l = build_line((44/2, 69-15)).append(
-        op_arc(10, -45-90).named('a'),
+        op_arc(-45-90, r=10).named('a'),
         op_line(end=XX(15)), YY(0), op_fillet(12),
         op_close(Axis.Y)
     )
@@ -160,7 +160,7 @@ def test_ppack_01_09() -> Part:
     p1 = cl.normal_loc(tangent=-1) * p1
 
     l2 = build_line(Y(60), Plane.YZ).append(
-        op_arc(15, 75/2-90), op_line(end=XX(75/2)),
+        op_arc(75/2-90, r=15), op_line(end=XX(75/2)),
         YY(0), op_close(Axis.Y)
     )
     p2 = mirror_add(l2.extrude(-13))
@@ -185,7 +185,7 @@ def test_23_T_24_curved_support() -> Part:
     r1, r2 = 55/2, 30/2
 
     l = build_line(Plane.XZ).append(
-        op_arc(30, 90-8, center=(77-r1, 0)),
+        op_old_arc(30, 90-8, center=(77-r1, 0)),
         op_line(end=XX(r1)),
         op_move(end=YY(50)),
         op_extend(end=5).reversed,

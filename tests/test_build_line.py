@@ -1,8 +1,10 @@
 import io
 import pytest
+from typing import Any
 from pytest import approx
 
 from build123d import *
+from build123d.topology import Shape
 from build123d_draft import *  # type: ignore[assignment]
 
 
@@ -66,3 +68,30 @@ def test_trim() -> None:
     nw = trim_wire(w, end=p)
     assert nw.s == Vector(0)
     assert nw.e == Vector(8)
+
+
+def assert_bb(shape: Shape[Any], min: VectorLike, max: VectorLike) -> None:
+    bb = shape.bounding_box()
+    assert (bb.min, bb.max) == (Vector(min), Vector(max))
+
+
+def test_radius_arc() -> None:
+    l = build_line(Plane.XZ).append(op_arc(start=At(None, FREE), end=(30, 0), d=50))
+    assert_bb(l.wire(), (0, 0, 0), (30, 0, 5))
+
+    l = build_line(Plane.XZ).append(op_arc(start=At(None, FREE), end=(30, 0), d=-50))
+    assert_bb(l.wire(), (0, 0, -5), (30, 0, 0))
+
+    l = build_line(Plane.XZ).append(op_arc(start=At(None, FREE), end=(30, 0), d=50, short=False))
+    assert_bb(l.wire(), (-10, 0, -45), (40, 0, 0))
+
+
+def test_jern_arc() -> None:
+    l = build_line(Plane.XZ).append(op_arc(180, r=20))
+    assert_bb(l.wire(), (0, 0, 0), (20, 0, 40))
+
+    l = build_line(Plane.XZ).append(op_arc(-90, r=20))
+    assert_bb(l.wire(), (0, 0, -20), (20, 0, 0))
+
+    l = build_line(Plane.XZ).append(op_arc((20, 20)))
+    assert_bb(l.wire(), (0, 0, 0), (20, 0, 20))

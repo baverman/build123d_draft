@@ -30,7 +30,7 @@ def test_corner_cap() -> Part:
     """
     l = build_line(Plane.XZ).append(
         YY(55), X(20), YY(9), XX(155), Y(-9),
-        op_arc(560, to=(0, 0), tangent=False)
+        op_arc(start=Dir(FREE), end=(0, 0), r=560)
     )
     part = l.extrude(-60)
 
@@ -59,7 +59,7 @@ def test_lstop_simple() -> Part:
     [Source](https://www.tootalltoby.com/practice/6926892f-c1e3-4d84-8ed8-359eb98d51b8).
     """
     l = build_line((130, 0), tangent=(0, 1)).append(
-        op_arc(77, 45).named('a'), op_trim(axis_offset(Axis.X, 25, 85/2), add=True),
+        op_arc(45, r=77).named('a'), op_trim(axis_offset(Axis.X, 25, 85/2), add=True),
         op_fillet(20), op_close(mirror=Axis.X)
     )
     part = l.extrude(12)

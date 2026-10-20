@@ -40,7 +40,15 @@ from .utils import (
     assert_args,
     debug,
 )
-from .tools import make_axis, intersection, PPos, param_on_point, trim_wire, reversed_wire
+from .tools import (
+    make_axis,
+    intersection,
+    PPos,
+    param_on_point,
+    trim_wire,
+    reversed_wire,
+    radius_arc,
+)
 
 __all__ = [
     'Angle',
@@ -48,8 +56,10 @@ __all__ = [
     'build_line',
     'build_line_op',
     'Dir',
+    'FREE',
     'Op',
     'op_arc',
+    'op_old_arc',
     'op_chamfer',
     'op_close',
     'op_drop',
@@ -357,65 +367,111 @@ def op_start(
         lb._start_tangent = lb.to_direction(tangent)
 
 
+class Free:
+    pass
+
+
+FREE = Free()
+
+
 @dataclass
 class Angle:
     angle: float
 
 
 class Dir:
-    direction: TLike
+    direction: TLike | Free
 
-    def __init__(self, X: float | TLike = 1, Y: float = 0, Z: float = 0, angle: float = 0) -> None:
+    def __init__(
+        self, X: float | TLike | Free = 1, Y: float = 0, Z: float = 0, angle: float | None = None
+    ) -> None:
         self.angle = angle
         if isinstance(X, (float, int)):
             self.direction = (X, Y, Z)
         else:
             self.direction = X
 
-    def localize(self, lb: build_line) -> Vector:
+    def localize(self, lb: build_line) -> Vector | None:
+        if isinstance(self.direction, Free):
+            return None
+
         tangent = lb.to_direction(self.direction)
-        if self.angle != 0:
+        if self.angle is not None:
             return tangent.rotate(make_axis(lb.plane), self.angle)
         return tangent
 
+    def __repr__(self) -> str:
+        return f'Dir({self.direction}, angle={self.angle})'
 
+
+@dataclass
 class At:
-    position: VLike
-    direction: Dir
+    position: VLike | Free | None = None
+    direction: TLike | Free | None = None
+    angle: float | None = None
 
-    def __init__(self, position: VLike, direction: TLike | None = None, angle: float = 0) -> None:
-        self.position = position
-        self.direction = Dir(direction or (1, 0, 0), angle=angle)
+    @staticmethod
+    def parse(
+        lb: build_line,
+        desc: VLike | AtDir | Free | None,
+        default: tuple[Vector | Free, Vector | Free],
+        default_refdir: TLike | Free = (1, 0, 0),
+    ) -> tuple[Vector | None, Vector | None]:
+        position: VLike | Free | None = None
+        direction: TLike | Free | None = None
+        angle: float | None = None
+
+        if isinstance(desc, Dir):
+            direction, angle = desc.direction, desc.angle
+        elif isinstance(desc, At):
+            position, direction, angle = desc.position, desc.direction, desc.angle
+        elif isinstance(desc, Angle):
+            angle = desc.angle
+            # return default[0], lb.tangent().rotate(make_axis(lb.plane), desc.angle)
+        elif isinstance(desc, Free):
+            return None, None
+        elif desc is not None:
+            position = desc
+
+        if position is None:
+            position = default[0]
+
+        if direction is None and angle is None:
+            direction = default[1]
+
+        if isinstance(position, Free):
+            npos = None
+        else:
+            npos = lb.to_vector(position)
+
+        if isinstance(direction, Free):
+            ndir = None
+        else:
+            if direction is None and angle is not None:
+                t = lb.tangent() if isinstance(default[1], Free) else default[1]
+                ndir = t.rotate(make_axis(lb.plane), angle)
+            else:
+                assert direction
+                ndir = Dir(direction, angle=angle).localize(lb)
+
+        return npos, ndir
 
 
-def _parse_start(
-    lb: build_line,
-    start: VLike | Dir | At | Angle | None = None,
-) -> tuple[Vector, Vector | None]:
-    if start is None:
-        return lb.e, lb.tangent()
-
-    if isinstance(start, Dir):
-        return lb.e, start.localize(lb)
-    elif isinstance(start, At):
-        return lb.to_vector(start.position), start.direction.localize(lb)
-    elif isinstance(start, Angle):
-        return lb.e, lb.tangent().rotate(make_axis(lb.plane), start.angle)
-
-    return lb.to_vector(start), lb.to_direction((1, 0, 0))
+AtDir = At | Dir | Angle
 
 
 @build_line_op
 def op_line(
     lb: build_line | None,
     end: float | VLike | UntilType,
-    start: VLike | Dir | At | Angle | None = None,
+    start: VLike | AtDir | None = None,
 ) -> Mixin1D[Any] | None:
     if lb is None:
         return None
 
-    nstart, tangent = _parse_start(lb, start)
-    assert tangent
+    nstart, tangent = At.parse(lb, start, (lb.e, lb.tangent()))
+    assert nstart is not None
+    assert tangent is not None
 
     if isinstance(end, (float, int)):
         return lb.add_shape(Line(nstart, nstart + tangent.normalized() * end))
@@ -472,8 +528,75 @@ def op_extend(
     return l
 
 
+ArcParam = Literal['start_point', 'start_tangent', 'end_point', 'end_tangent', 'center', 'radius']
+_RADIUS_ARC = frozenset[ArcParam](('start_point', 'end_point', 'radius'))
+_JERN_ARC = frozenset[ArcParam](('start_point', 'start_tangent', 'end_point'))
+
+
+def set_arc_param(params: set[ArcParam], obj: object, name: ArcParam) -> None:
+    if obj is not None:
+        params.add(name)
+
+
 @build_line_op
 def op_arc(
+    lb: build_line | None,
+    end: float | VLike | AtDir | Free = FREE,
+    start: VLike | AtDir | None = None,
+    r: float | None = None,
+    d: float | None = None,
+    center: VLike | None = None,
+    short: bool = True,
+) -> Mixin1D[Any] | None:
+    if lb is None:
+        return None
+
+    params = set[ArcParam]()
+
+    if d is not None:
+        r = d / 2
+    set_arc_param(params, r, 'radius')
+
+    lbt = lb.tangent()
+    spoint, sdir = At.parse(lb, start, (lb.e, lbt))
+    set_arc_param(params, spoint, 'start_point')
+    set_arc_param(params, sdir, 'start_tangent')
+
+    epoint = edir = None
+    if isinstance(end, (float, int)):
+        if spoint is not None and sdir is not None and r is not None:
+            edir = None
+            ax = make_axis(lb.plane)
+            n = sdir.rotate(ax, math.copysign(90, end))
+            c = spoint + n.normalized() * r
+            epoint = c + (spoint - c).rotate(ax, end)
+            params.remove('radius')
+    else:
+        epoint, edir = At.parse(lb, end, (FREE, FREE))
+
+    set_arc_param(params, epoint, 'end_point')
+    set_arc_param(params, edir, 'end_tangent')
+
+    print(params)
+    print(spoint, sdir)
+    print(epoint, edir)
+
+    if params == _RADIUS_ARC:
+        assert spoint
+        assert epoint
+        assert r
+        return lb.add_shape(radius_arc(lb.plane, spoint, epoint, r, short=short))
+    elif params == _JERN_ARC:
+        assert spoint
+        assert sdir
+        assert epoint
+        return lb.add_shape(Edge.make_tangent_arc(spoint, sdir, epoint))
+
+    raise ValueError(f'Invalid input params: {params}')
+
+
+@build_line_op
+def op_old_arc(
     lb: build_line | None,
     radius: float | None = None,
     size: float | None = None,
