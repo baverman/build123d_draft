@@ -1,4 +1,5 @@
 import math
+import enum
 import functools
 from itertools import chain as it_chain
 from dataclasses import dataclass, replace
@@ -526,16 +527,30 @@ def op_extend(
     return l
 
 
-ArcParam = Literal['start_point', 'start_tangent', 'end_point', 'end_tangent', 'center', 'radius']
-_RADIUS_ARC = frozenset[ArcParam]({'start_point', 'end_point', 'radius'})
-_JERN_ARC = frozenset[ArcParam]({'start_point', 'start_tangent', 'end_point'})
-_END_TANGENT_ARC = frozenset[ArcParam]({'start_point', 'radius', 'end_tangent', 'start_tangent'})
-_CENTER_ARC = frozenset[ArcParam]({'end_tangent', 'radius', 'center', 'start_tangent'})
+class ArcParam(enum.Flag):
+    empty = 0
+    start_point = enum.auto()
+    start_tangent = enum.auto()
+    end_point = enum.auto()
+    end_tangent = enum.auto()
+    center = enum.auto()
+    radius = enum.auto()
 
 
-def set_arc_param(params: set[ArcParam], obj: object, name: ArcParam) -> None:
+AP = ArcParam
+
+
+class ArcParams:
+    RADIUS = AP.start_point | AP.end_point | AP.radius
+    JERN = AP.start_point | AP.start_tangent | AP.end_point
+    END_TANGENT = AP.start_point | AP.radius | AP.end_tangent | AP.start_tangent
+    CENTER = AP.end_tangent | AP.radius | AP.center | AP.start_tangent
+
+
+def arc_param(obj: object, param: ArcParam) -> ArcParam:
     if obj is not None:
-        params.add(name)
+        return param
+    return ArcParam.empty
 
 
 @build_line_op
@@ -551,14 +566,14 @@ def op_arc(
     if lb is None:
         return None
 
-    params = set[ArcParam]()
+    params = ArcParam.empty
 
     if d is not None:
         r = d / 2
-    set_arc_param(params, r, 'radius')
+    params |= arc_param(r, AP.radius)
 
     ncenter = lb.to_vector(center) if center is not None else None
-    set_arc_param(params, ncenter, 'center')
+    params |= arc_param(ncenter, AP.center)
 
     lbt = lb.tangent()
 
@@ -569,39 +584,39 @@ def op_arc(
         end = Angle(end)
 
     spoint, sdir = At.parse(lb, start, (lb.e, lbt), lbt)
-    if 'center' in params:
+    if (AP.radius | AP.center) in params:
         spoint = None
-    set_arc_param(params, spoint, 'start_point')
-    set_arc_param(params, sdir, 'start_tangent')
+    params |= arc_param(spoint, AP.start_point)
+    params |= arc_param(sdir, AP.start_tangent)
 
     epoint, edir = At.parse(lb, end, (FREE, FREE), sdir or lbt)
-    if 'center' in params:
+    if (AP.radius | AP.center) in params:
         epoint = None
-    set_arc_param(params, epoint, 'end_point')
-    set_arc_param(params, edir, 'end_tangent')
+    params |= arc_param(epoint, AP.end_point)
+    params |= arc_param(edir, AP.end_tangent)
 
     # convert params to known constructions
-    if params == _END_TANGENT_ARC:
+    if params == ArcParams.END_TANGENT:
         assert spoint is not None and sdir is not None and r is not None and edir is not None
         ax = make_axis(lb.plane)
         s2c = sdir.rotate(ax, math.copysign(90, r)).normalized()
         c = spoint + s2c * abs(r)
         c2e = edir.rotate(ax, -math.copysign(90, r)).normalized()
         epoint = c + c2e * abs(r)
-        params = set(_JERN_ARC)
-    elif params == _CENTER_ARC:
+        params = ArcParams.JERN
+    elif params == ArcParams.CENTER:
         assert sdir is not None and edir is not None and r is not None and ncenter is not None
         ax = make_axis(lb.plane)
         spoint = ncenter + sdir.normalized() * abs(r)
         sdir = sdir.rotate(ax, math.copysign(90, r))
         epoint = ncenter + edir.normalized() * abs(r)
-        params = set(_JERN_ARC)
+        params = ArcParams.JERN
 
     # construct actual edges
-    if params == _RADIUS_ARC:
+    if params == ArcParams.RADIUS:
         assert spoint is not None and epoint is not None and r is not None
         return lb.add_shape(radius_arc(lb.plane, spoint, epoint, r, short=short))
-    elif params == _JERN_ARC:
+    elif params == ArcParams.JERN:
         assert spoint is not None and sdir is not None and epoint is not None
         return lb.add_shape(Edge.make_tangent_arc(spoint, sdir, epoint))
 
