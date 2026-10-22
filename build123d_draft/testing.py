@@ -10,10 +10,10 @@ ShowObject = Shape[Any] | build_line
 P = ParamSpec('P')
 R = TypeVar('R')
 
-_current_fn: Callable[[], ShowObject] | None = None
+_current_fn: Callable[[], ShowObject | None] | None = None
 
 
-def set_current(fn: Callable[[], ShowObject]) -> Callable[[], ShowObject]:
+def set_current(fn: Callable[[], ShowObject | None]) -> Callable[[], ShowObject | None]:
     global _current_fn
     import pytest
 
@@ -32,16 +32,6 @@ class ShowList:
         self.names.clear()
         self.cnt = 0
 
-    def __call__(self, fn: Callable[P, ShowObject | None]) -> Callable[P, ShowObject | None]:
-        @functools.wraps(fn)
-        def inner(*args: P.args, **kwargs: P.kwargs) -> ShowObject | None:
-            part = fn(*args, **kwargs)
-            if part is not None:
-                self.append(part=part)
-            return part
-
-        return inner
-
     def origin_radius(self) -> float:
         if not self.objects:
             return 1
@@ -55,7 +45,7 @@ class ShowList:
         else:
             return 1
 
-    def append(self, *items: ShowObject, **kwargs: ShowObject) -> None:
+    def append(self, *items: ShowObject | None, **kwargs: ShowObject | None) -> None:
         olist = []
         if items:
             fl = sys._getframe(1).f_locals
@@ -91,7 +81,7 @@ def main_yacv() -> None:
         slist.reset()
     sadd(origin=Sphere(1))
     if _current_fn:
-        _current_fn()
+        slist.append(result=_current_fn())
     show(*slist.objects, names=slist.names)
 
 
@@ -105,7 +95,7 @@ def main_ocp_vscode(**options: object) -> None:
 
     if _current_fn:
         slist.reset()
-        _current_fn()
+        slist.append(result=_current_fn())
     show(*slist.objects, names=slist.names, progress='', reset_camera=Camera.KEEP)
 
 

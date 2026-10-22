@@ -18,7 +18,6 @@ densa = 1020e-6
 densb = 2700e-6
 densc = 7800e-6
 
-@slist
 def _test_model1() -> Part:
     l = build_line(Plane.XZ).append(
         YY(55), X(20), YY(9), XX(155), Y(-9),
@@ -38,7 +37,6 @@ def _test_model1() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((30, 0), view(30, 0, clip=-Plane.XZ, hscale=0.02), size=(600, 480))
 def test_24WC_12_tube_plug() -> Part:
     """

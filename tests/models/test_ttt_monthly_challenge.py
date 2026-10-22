@@ -23,7 +23,6 @@ densb = 2700e-6
 densc = 7800e-6
 
 
-@slist
 @pytest.mark.views(None, (0, 70), size=(480, 480))
 def test_24_04_LB1_u_joint_fork() -> Part:
     """
@@ -61,7 +60,6 @@ def test_24_04_LB1_u_joint_fork() -> Part:
     return part
 
 
-@slist
 def test_22_T_32_pivot_plate() -> Part:
     l = build_line(Plane.XZ).append(
         Y(2.625-1.5), op_arc(-180, d=-3).named('a'),
@@ -83,7 +81,6 @@ def test_22_T_32_pivot_plate() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views(None, (-90, 0), size=(480, 480))
 def test_24_05_LB1_clamp_bracket() -> Part:
     """
@@ -118,7 +115,6 @@ def test_24_05_LB1_clamp_bracket() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((45, 0), (45, 70), size=(480, 480))
 def test_24_05_LB2_chamber() -> Part:
     """
@@ -152,7 +148,6 @@ def test_24_05_LB2_chamber() -> Part:
     return part
 
 
-@slist
 def test_24_05_LB3_arm_housing() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-05/drawings/).
@@ -178,7 +173,6 @@ def test_24_05_LB3_arm_housing() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((-90, 0))
 def test_24_07_LB3_adj_base() -> Part:
     """
@@ -213,7 +207,6 @@ def test_24_07_LB3_adj_base() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((110, 0))
 def test_24_07_LB1_foot_holder() -> Part:
     """
@@ -241,7 +234,6 @@ def test_24_07_LB1_foot_holder() -> Part:
     return part
 
 
-@slist
 def test_24_04_LB2_rod_end_mount() -> Part:
     """
     [Source](https://www.tootalltoby.com/challenge/2024-04/drawings/).
@@ -276,7 +268,6 @@ def test_24_04_LB2_rod_end_mount() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((10, 5), (100, 15))
 def test_24_04_LB3_end_base() -> Part:
     """
@@ -315,7 +306,6 @@ def test_24_04_LB3_end_base() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((15, 10))
 def test_2024_03_10_offset_support() -> Part:
     """
@@ -347,7 +337,6 @@ def test_2024_03_10_offset_support() -> Part:
     return part
 
 
-@slist
 def test_2024_03_12_side_spacer() -> Part:
     """
     [Source](https://www.tootalltoby.com/leaderboard/2024-03/).

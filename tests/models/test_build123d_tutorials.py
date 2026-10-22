@@ -20,7 +20,6 @@ densa = 1020e-6
 densb = 2700e-6
 densc = 7800e-6
 
-@slist
 @pytest.mark.views((100, 0))
 def test_ppack_01_01() -> Part:
     l = build_line(Plane.XZ.offset(25)).append(
@@ -48,7 +47,6 @@ def test_ppack_01_01() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((60, 15), view(60, 15, clip=-Plane.XZ), size=(480, 480))
 def test_ppack_01_02() -> Part:
     l = build_line(X(49/2), Plane.XZ).append(
@@ -77,7 +75,6 @@ def test_ppack_01_02() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((90, 0))
 def test_ppack_01_03() -> Part:
     l = build_line(Plane.XZ).append(
@@ -97,7 +94,6 @@ def test_ppack_01_03() -> Part:
     return part
 
 
-@slist
 def test_ppack_01_04() -> Part:
     l = build_line(Plane.XZ).append(
         X(80-38/2-10), Y(7-30), op_fillet(5),
@@ -122,7 +118,6 @@ def test_ppack_01_04() -> Part:
     return part
 
 
-@slist
 def test_ppack_01_06() -> Part:
     l = build_line((44/2, 69-15)).append(
         op_arc(-45-90, r=-10).named('a'),
@@ -146,7 +141,6 @@ def test_ppack_01_06() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((10, 0))
 def test_ppack_01_09() -> Part:
     cl = build_line(Plane.XZ).append(
@@ -180,7 +174,6 @@ def test_ppack_01_09() -> Part:
     return part
 
 
-@slist
 def test_23_T_24_curved_support() -> Part:
     r1, r2 = 55/2, 30/2
 

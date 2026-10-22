@@ -22,7 +22,6 @@ densb = 2700e-6
 densc = 7800e-6
 
 
-@slist
 @pytest.mark.views((0, -5))
 def test_corner_cap() -> Part:
     """
@@ -52,7 +51,6 @@ def test_corner_cap() -> Part:
     return part
 
 
-@slist
 @pytest.mark.views((0, -5))
 def test_lstop_simple() -> Part:
     """
