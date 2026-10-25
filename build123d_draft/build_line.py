@@ -49,6 +49,7 @@ from .tools import (
     trim_wire,
     reversed_wire,
     radius_arc,
+    tangent_center,
 )
 
 __all__ = [
@@ -70,6 +71,8 @@ __all__ = [
     'op_start',
     'op_trim',
     'TrimOp',
+    'TangentToLast',
+    'OnLast',
 ]
 
 _P = ParamSpec('_P')
@@ -458,6 +461,15 @@ class At:
 AtDir = At | Dir | Angle
 
 
+class Ref(enum.Enum):
+    TangentToLast = enum.auto()
+    OnLast = enum.auto()
+
+
+TangentToLast: Literal[Ref.TangentToLast] = Ref.TangentToLast
+OnLast: Literal[Ref.OnLast] = Ref.OnLast
+
+
 @build_line_op
 def op_line(
     lb: build_line | None,
@@ -527,100 +539,92 @@ def op_extend(
     return l
 
 
-class ArcParam(enum.Flag):
-    empty = 0
-    start_point = enum.auto()
-    start_tangent = enum.auto()
-    end_point = enum.auto()
-    end_tangent = enum.auto()
-    center = enum.auto()
-    radius = enum.auto()
-
-
-AP = ArcParam
-
-
-class ArcParams:
-    RADIUS = AP.start_point | AP.end_point | AP.radius
-    JERN = AP.start_point | AP.start_tangent | AP.end_point
-    END_TANGENT = AP.start_point | AP.radius | AP.end_tangent | AP.start_tangent
-    CENTER = AP.end_tangent | AP.radius | AP.center | AP.start_tangent
-
-
-def arc_param(obj: object, param: ArcParam) -> ArcParam:
-    if obj is not None:
-        return param
-    return ArcParam.empty
+ArcRefs = Literal[Ref.TangentToLast, Ref.OnLast]
 
 
 @build_line_op
 def op_arc(
     lb: build_line | None,
     end: float | VLike | AtDir | Free = FREE,
-    start: float | VLike | AtDir | None = None,
+    start: float | VLike | AtDir | ArcRefs | None = None,
     r: float | None = None,
     d: float | None = None,
-    center: VLike | None = None,
+    center: VLike | Edge | None = None,
     short: bool = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
         return None
 
-    params = ArcParam.empty
-
     if d is not None:
         r = d / 2
-    params |= arc_param(r, AP.radius)
 
-    ncenter = lb.to_vector(center) if center is not None else None
-    params |= arc_param(ncenter, AP.center)
+    trim_last_param = None
+    center_on = None
+    if isinstance(center, Edge):
+        center_on = center
+        ncenter = None
+    else:
+        ncenter = lb.to_vector(center) if center is not None else None
 
     lbt = lb.tangent()
 
     if isinstance(start, (float, int)):
         start = Angle(start)
 
+    if isinstance(start, Ref):
+        spoint = sdir = None
+    else:
+        spoint, sdir = At.parse(lb, start, (lb.e, lbt), lbt)
+        if r is not None and ncenter is not None:
+            spoint = None
+
     if isinstance(end, (float, int)):
         end = Angle(end)
 
-    spoint, sdir = At.parse(lb, start, (lb.e, lbt), lbt)
-    if (AP.radius | AP.center) in params:
-        spoint = None
-    params |= arc_param(spoint, AP.start_point)
-    params |= arc_param(sdir, AP.start_tangent)
-
     epoint, edir = At.parse(lb, end, (FREE, FREE), sdir or lbt)
-    if (AP.radius | AP.center) in params:
+    if r is not None and ncenter is not None:
         epoint = None
-    params |= arc_param(epoint, AP.end_point)
-    params |= arc_param(edir, AP.end_tangent)
 
-    # convert params to known constructions
-    if params == ArcParams.END_TANGENT:
-        assert spoint is not None and sdir is not None and r is not None and edir is not None
-        ax = make_axis(lb.plane)
-        s2c = sdir.rotate(ax, math.copysign(90, r)).normalized()
-        c = spoint + s2c * abs(r)
-        c2e = edir.rotate(ax, -math.copysign(90, r)).normalized()
-        epoint = c + c2e * abs(r)
-        params = ArcParams.JERN
-    elif params == ArcParams.CENTER:
-        assert sdir is not None and edir is not None and r is not None and ncenter is not None
-        ax = make_axis(lb.plane)
-        spoint = ncenter + sdir.normalized() * abs(r)
-        sdir = sdir.rotate(ax, math.copysign(90, r))
-        epoint = ncenter + edir.normalized() * abs(r)
-        params = ArcParams.JERN
+    if start == Ref.TangentToLast and r is not None:
+        if center_on is None and epoint is not None:
+            center_on = Edge.make_circle(r, lb.plane.shift_origin(epoint))
 
-    # construct actual edges
-    if params == ArcParams.RADIUS:
-        assert spoint is not None and epoint is not None and r is not None
-        return lb.add_shape(radius_arc(lb.plane, spoint, epoint, r, short=short))
-    elif params == ArcParams.JERN:
-        assert spoint is not None and sdir is not None and epoint is not None
-        return lb.add_shape(Edge.make_tangent_arc(spoint, sdir, epoint))
+        if center_on is not None:
+            vt = tangent_center(lb[-1], center_on, r, lb.plane)
+            if vt:
+                trim_last_param, spoint, sdir = vt
 
-    raise ValueError(f'Invalid input params: {params}')
+    result = None
+    while True:
+        # construct actual edges
+        if spoint is not None and sdir is not None and epoint is not None:
+            result = Edge.make_tangent_arc(spoint, sdir, epoint)
+            break
+        elif spoint is not None and epoint is not None and r is not None:
+            result = radius_arc(lb.plane, spoint, epoint, r, short=short)
+            break
+
+        # convert params to known constructions and try again
+        if spoint is not None and sdir is not None and r is not None and edir is not None:
+            ax = make_axis(lb.plane)
+            s2c = sdir.rotate(ax, math.copysign(90, r)).normalized()
+            c = spoint + s2c * abs(r)
+            c2e = edir.rotate(ax, -math.copysign(90, r)).normalized()
+            epoint = c + c2e * abs(r)
+        elif sdir is not None and edir is not None and r is not None and ncenter is not None:
+            ax = make_axis(lb.plane)
+            spoint = ncenter + sdir.normalized() * abs(r)
+            sdir = sdir.rotate(ax, math.copysign(90, r))
+            epoint = ncenter + edir.normalized() * abs(r)
+        else:
+            break
+
+    if result is None:
+        raise ValueError(f'Not enough constraints')
+
+    if trim_last_param is not None:
+        lb._shapes[-1] = trim_wire(lb._shapes[-1], end=trim_last_param)
+    return lb.add_shape(result)
 
 
 @build_line_op

@@ -1,3 +1,4 @@
+# repl-client
 import io
 import pytest
 from typing import Any
@@ -6,6 +7,7 @@ from pytest import approx
 from build123d import *
 from build123d.topology import Shape
 from build123d_draft import *  # type: ignore[assignment]
+from build123d_draft.testing import *
 
 
 def test_op_close_axis_transformation() -> None:
@@ -103,3 +105,16 @@ def test_center_arc() -> None:
 
     l = build_line(Plane.XZ).append(op_arc(center=X(10), r=-10, end=90))
     assert_bb(l.wire(), (0, 0, -10), (20, 0, 10))
+
+
+def test_trimmed_tangent_arc() -> None:
+    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=(20, 10), r=10))
+    assert_bb(l.wire(), (0, 0, 0), (20, 0, 10))
+
+    cl = Edge.make_line((10, 0, -20), (10, 0, 20))
+    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=-90, r=-10, center=cl))
+    assert_bb(l.wire(), (0, 0, -10), (20, 0, 0))
+
+
+if __name__ == '__main__':
+    main_ocp_vscode()

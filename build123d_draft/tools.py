@@ -4,6 +4,9 @@ from typing import Any, Collection, Sequence, Iterable
 
 import OCP  # type: ignore[import-untyped]
 from OCP.BRep import BRep_Tool  # type: ignore[import-untyped]
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge  # type: ignore[import-untyped]
+from OCP.Geom2d import Geom2d_TrimmedCurve  # type: ignore[import-untyped]
+from OCP.Precision import Precision  # type: ignore[import-untyped]
 
 from build123d.geometry import Vector, Pos, Location, Plane, Axis, RotationLike, VectorLike
 from build123d.topology import (
@@ -361,9 +364,12 @@ def edge_curve(edge: Edge) -> tuple[object, tuple[float, float]]:
 
 
 def param_on_point(
-    wire: Wire, point: Vector | Sequence[float], normalized: bool = True
+    wire: Wire | Edge, point: Vector | Sequence[float], normalized: bool = True
 ) -> float | None:
-    edges = wire.edges()
+    if isinstance(wire, Edge):
+        edges = [wire]
+    else:
+        edges = wire.edges()
     U = 0.0
     candidates: list[tuple[float, float]] = []
     pt = Vector(point).to_pnt()
@@ -385,8 +391,12 @@ def param_on_point(
     return u
 
 
-def trim_wire(wire: Wire, start: float = 0, end: float = 1) -> Wire:
-    edges = wire.edges()
+def trim_wire(wire: Wire | Edge, start: float = 0, end: float = 1) -> Wire:
+    if isinstance(wire, Edge):
+        edges = [wire]
+    else:
+        edges = wire.edges()
+
     curves = [(it, edge_curve(it)) for it in edges]
     U = sum(abs(pr[0] - pr[1]) for _, (_, pr) in curves)
     start *= U
@@ -485,3 +495,75 @@ def radius_arc(plane: Plane, start: Vector, end: Vector, radius: float, short: b
         return sagitta_arc(plane, start, end, sagitta)
     else:
         return sagitta_arc(plane, start, end, -sagitta)
+
+
+def approx_edge(plane: Plane, curve: object, prange: tuple[float, float]) -> Edge:
+    trimmed = Geom2d_TrimmedCurve(curve, *prange)
+
+    approx = OCP.Geom2dConvert.Geom2dConvert_ApproxCurve(
+        trimmed,
+        1e-6,
+        OCP.GeomAbs.GeomAbs_Shape.GeomAbs_C1,
+        100,
+        8,
+    )
+
+    if not approx.IsDone():
+        raise RuntimeError('Offset approximation failed')
+
+    result3d = OCP.GeomAPI.GeomAPI.To3d_s(approx.Curve(), plane.wrapped)
+    return Edge(BRepBuilderAPI_MakeEdge(result3d).Edge())
+
+
+def to_curve2d(edge: Edge, plane: Plane) -> tuple[object, tuple[float, float]]:
+    p1, p2 = BRep_Tool.Range_s(edge.wrapped)
+    curve3d = BRep_Tool.Curve_s(edge.wrapped, p1, p2)
+    curve2d = OCP.GeomAPI.GeomAPI.To2d_s(curve3d, plane.wrapped)
+
+    first = curve2d.FirstParameter()
+    last = curve2d.LastParameter()
+    if Precision.IsInfinite_s(first) or Precision.IsInfinite_s(last):
+        curve2d = Geom2d_TrimmedCurve(curve2d, p1, p2)
+
+    return curve2d, (p1, p2)
+
+
+# def tangent_point(tangent: Edge, center: Vector) -> tuple[Vector, Vector]:
+#     """Return the contact point on tangent curve closest to center and its tangent."""
+#     _, point, _ = tangent.distance_to_with_closest_points(center)
+#     param = tangent.param_at_point(point)
+#
+#     # param_at_point() uses the underlying curve parameter, while tangent_at()
+#     # follows the edge orientation. Evaluate on a forward copy and flip if needed.
+#     forward = tangent if tangent.is_forward else tangent.reversed()
+#     direction = forward.tangent_at(param)
+#     if not tangent.is_forward:
+#         direction = -direction
+#
+#     return point, direction
+
+
+def tangent_center(
+    tangent: Edge, center_on: Edge, radius: float, plane: Plane
+) -> tuple[float, Vector, Vector] | None:
+    tcurve, tprange = to_curve2d(tangent, plane)
+    off_tcurve = OCP.Geom2d.Geom2d_OffsetCurve(tcurve, -radius)
+    ccurve, cprange = to_curve2d(center_on, plane)
+
+    inter = OCP.Geom2dAPI.Geom2dAPI_InterCurveCurve(off_tcurve, ccurve)
+
+    candidates = []
+    for i in range(1, inter.NbPoints() + 1):
+        p = inter.Point(i)
+        c = Vector(p.X(), p.Y()).transform(plane.reverse_transform)
+        # v, t = tangent_point(tangent, c)
+        p = param_on_point(tangent, c)
+        if p:
+            candidates.append(p)
+
+    if not candidates:
+        return None
+
+    candidates.sort()
+    p = candidates[0]
+    return p, tangent.position_at(p), tangent.tangent_at(p)
