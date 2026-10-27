@@ -50,6 +50,7 @@ from .tools import (
     reversed_wire,
     radius_arc,
     tangent_center,
+    RelAxis,
 )
 
 __all__ = [
@@ -549,7 +550,7 @@ def op_arc(
     start: float | VLike | AtDir | ArcRefs | None = None,
     r: float | None = None,
     d: float | None = None,
-    center: VLike | Edge | None = None,
+    center: VLike | Edge | RelAxis | None = None,
     short: bool = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
@@ -559,9 +560,12 @@ def op_arc(
         r = d / 2
 
     trim_last_param = None
-    center_on = None
+    center_on: Edge | Axis | None = None
     if isinstance(center, Edge):
         center_on = center
+        ncenter = None
+    elif isinstance(center, RelAxis):
+        center_on = center.to_axis(lb.plane)
         ncenter = None
     else:
         ncenter = lb.to_vector(center) if center is not None else None

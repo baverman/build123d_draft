@@ -115,6 +115,9 @@ def test_trimmed_tangent_arc() -> None:
     l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=-90, r=-10, center=cl))
     assert_bb(l.wire(), (0, 0, -10), (20, 0, 0))
 
+    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=-90, r=-10, center=AY(10)))
+    assert_bb(l.wire(), (0, 0, -10), (20, 0, 0))
+
 
 if __name__ == '__main__':
     main_ocp_vscode()

@@ -1,5 +1,6 @@
 import functools
 import math
+from dataclasses import dataclass, field, replace
 from typing import Any, Collection, Sequence, Iterable
 
 import OCP  # type: ignore[import-untyped]
@@ -36,6 +37,8 @@ SAlign2D = Align | tuple[Align, Align]
 SAlign3D = Align | tuple[Align, Align, Align]
 
 __all__ = [
+    'AX',
+    'AY',
     'aligned',
     'axis_plane',
     'axis_offset',
@@ -544,18 +547,26 @@ def to_curve2d(edge: Edge, plane: Plane) -> tuple[object, tuple[float, float]]:
 
 
 def tangent_center(
-    tangent: Edge, center_on: Edge, radius: float, plane: Plane
+    tangent: Edge, center_on: Edge | Axis, radius: float, plane: Plane
 ) -> tuple[float, Vector, Vector] | None:
     tcurve, tprange = to_curve2d(tangent, plane)
     off_tcurve = OCP.Geom2d.Geom2d_OffsetCurve(tcurve, -radius)
-    ccurve, cprange = to_curve2d(center_on, plane)
 
-    inter = OCP.Geom2dAPI.Geom2dAPI_InterCurveCurve(off_tcurve, ccurve)
+    cpoints: list[Vector] = []
+    if isinstance(center_on, Axis):
+        cpoints.extend(tangent.intersect(center_on) or [])
+    else:
+        ccurve, cprange = to_curve2d(center_on, plane)
+
+        inter = OCP.Geom2dAPI.Geom2dAPI_InterCurveCurve(off_tcurve, ccurve)
+
+        for i in range(1, inter.NbPoints() + 1):
+            p = inter.Point(i)
+            c = Vector(p.X(), p.Y()).transform(plane.reverse_transform)
+            cpoints.append(c)
 
     candidates = []
-    for i in range(1, inter.NbPoints() + 1):
-        p = inter.Point(i)
-        c = Vector(p.X(), p.Y()).transform(plane.reverse_transform)
+    for c in cpoints:
         # v, t = tangent_point(tangent, c)
         p = param_on_point(tangent, c)
         if p:
@@ -567,3 +578,55 @@ def tangent_center(
     candidates.sort()
     p = candidates[0]
     return p, tangent.position_at(p), tangent.tangent_at(p)
+
+
+def to_vector(plane: Plane, v: Vector | tuple[float, ...], is_dir: bool = False) -> Vector:
+    if isinstance(v, tuple):
+        return Vector(v).transform(plane.reverse_transform, is_direction=is_dir)
+    return v
+
+
+@dataclass(frozen=True)
+class RelAxisOpShift:
+    amount: float | tuple[float, ...] | Vector
+
+
+@dataclass(frozen=True)
+class RelAxisOpRotate:
+    amount: float
+
+
+@dataclass(frozen=True)
+class RelAxis:
+    position: Vector | tuple[float, ...] = (0, 0, 0)
+    direction: Vector | tuple[float, ...] = (1, 0, 0)
+    ops: tuple[RelAxisOpShift | RelAxisOpRotate, ...] = ()
+    normal_side: int = 1
+
+    def __call__(self, amount: float | Vector | tuple[float, ...]) -> RelAxis:
+        return replace(self, ops=self.ops + (RelAxisOpShift(amount),))
+
+    def rotate(self, amount: float) -> RelAxis:
+        return replace(self, ops=self.ops + (RelAxisOpRotate(amount),))
+
+    def to_axis(self, plane: Plane) -> Axis:
+        position = to_vector(plane, self.position)
+        direction = to_vector(plane, self.direction, is_dir=True)
+
+        if self.ops:
+            ax = Axis(plane.origin, plane.z_dir)
+            for op in self.ops:
+                if isinstance(op, RelAxisOpShift):
+                    if isinstance(op.amount, (float, int)):
+                        v = direction.rotate(ax, 90 * self.normal_side).normalized() * op.amount
+                    else:
+                        v = to_vector(plane, op.amount, is_dir=True)
+                    position = position + v
+                elif isinstance(op, RelAxisOpRotate):
+                    direction = direction.rotate(ax, op.amount)
+
+        return Axis(position, direction)
+
+
+AX = RelAxis(direction=(1, 0, 0))
+AY = RelAxis(direction=(0, 1, 0), normal_side=-1)
