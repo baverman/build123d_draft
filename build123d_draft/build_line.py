@@ -14,6 +14,7 @@ from typing import (
     Iterator,
     TypeGuard,
     assert_type,
+    cast,
 )
 
 from build123d import BuildLine, Sketch, Part, AngularDirection
@@ -161,6 +162,12 @@ class build_line:
 
         assert False, f'Unsupported type {type(nv)}'
 
+    def to_axis(self, axis: Axis | RelAxis) -> Axis:
+        if isinstance(axis, Axis):
+            return axis.located(self.plane.location)  # type: ignore[no-any-return]
+        else:
+            return axis.to_axis(self.plane)
+
     def apply(self, op: BuildLineOp) -> None:
         if isinstance(op, (Vector, Pos, tuple)):
             cop: Vector | Pos | tuple[float, ...] = op
@@ -243,6 +250,9 @@ class build_line:
         t = tangent * self.tangent(shape_idx, param)
         n = t.rotate(make_axis(self.plane), 90)
         return Location(Plane(p, x_dir=t, z_dir=n))
+
+    def loc_at(self, v: VLike) -> Location:
+        return Location(self.plane.shift_origin(self.to_vector(v)))
 
     def to_normal_plane(self, axis: Pos | Axis, start: Vector | None = None) -> Plane:
         if isinstance(axis, Pos):
@@ -719,23 +729,38 @@ def op_close(
 @build_line_op
 def op_trim(
     lb: build_line | None,
-    point: TrimOp | Axis | Vector,
+    point: TrimOp | Axis | Vector | RelAxis | Edge | None = None,
     near_by: Vector | Shape[Any] | None = None,
     add: bool = False,
 ) -> Mixin1D[Any] | None:
     if not lb:
         return None
-    s = lb._shapes[-1]
+
     other = None
+
+    if point is None:
+        add = True
+        point = cast(Edge, lb._shapes.pop())
+
+    s = lb._shapes[-1]
+
     if isinstance(point, TrimOp):
-        rv, other = point.trim(lb)
+        rv, other = point.trim(lb)  # type: ignore[call-arg,arg-type]
     else:
-        if isinstance(point, Axis):
-            ax: Axis = point.located(lb.plane.location)
+        if isinstance(point, (Axis, RelAxis)):
+            ax = lb.to_axis(point)
             npoint = intersection(s, ax, near_by=near_by)
             other = Line(npoint, ax.position)
+        elif isinstance(point, Edge):
+            npoint = intersection(s, point, near_by)
+            op = param_on_point(point, npoint)
+            assert op is not None
+            other = trim_wire(point, start=op)
+        else:
+            npoint = point
+
         param = param_on_point(s, npoint)
-        assert param
+        assert param is not None
         rv = lb._shapes[-1] = trim_wire(s, end=param)
 
     if other is not None and add:
