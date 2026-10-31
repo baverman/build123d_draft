@@ -179,7 +179,11 @@ class build_line:
             if op.name and s is not None:
                 s._lb_name = op.name
                 self._named[op.name] = s
-            if op.reverse:
+
+            if op.is_trim:
+                s = op_trim()(self)
+
+            if op.is_reverse:
                 chains = self.chains()
                 for it in chains[-1]:
                     it.wrapped.Reverse()
@@ -187,7 +191,8 @@ class build_line:
                 # rv.extend(reversed_wire(it) for it in reversed(chains[-1]))
                 rv.extend(reversed(chains[-1]))
                 self._shapes = rv
-            if op.connect:
+
+            if op.is_connect:
                 chains = self.chains()
                 if len(chains) > 1:
                     rv = list(it_chain.from_iterable(chains[:-1]))
@@ -325,11 +330,12 @@ class build_line:
 @dataclass
 class Op:
     fn: Callable[..., Mixin1D[Any] | None]
-    name: str
-    reverse: bool
-    connect: bool
     args: tuple[Any, ...]
     kwargs: Mapping[str, Any]
+    name: str | None = None
+    is_reverse: bool = False
+    is_connect: bool = False
+    is_trim: bool = False
 
     def __call__(self, lb: build_line) -> Mixin1D[Any] | None:
         return self.fn(lb, *self.args, **self.kwargs)
@@ -345,11 +351,15 @@ class Op:
 
     @property
     def connected(self) -> Op:
-        return replace(self, connect=True)
+        return replace(self, is_connect=True)
 
     @property
     def reversed(self) -> Op:
-        return replace(self, reverse=True)
+        return replace(self, is_reverse=True)
+
+    @property
+    def trims(self) -> Op:
+        return replace(self, is_trim=True)
 
 
 def build_line_op(
@@ -357,11 +367,8 @@ def build_line_op(
 ) -> Callable[_P, Op]:
     @functools.wraps(fn)
     def inner(*args: _P.args, **kwargs: _P.kwargs) -> Op:
-        name: str = kwargs.pop('name', None)  # type: ignore[assignment]
-        reverse: bool = kwargs.pop('reverse', False)  # type: ignore[assignment]
-        connect: bool = kwargs.pop('connect', False)  # type: ignore[assignment]
         fn(None, *args, **kwargs)
-        return Op(fn, name, reverse, connect, args, kwargs)
+        return Op(fn, args, kwargs)
 
     return inner
 

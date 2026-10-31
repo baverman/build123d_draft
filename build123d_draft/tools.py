@@ -587,46 +587,29 @@ def to_vector(plane: Plane, v: Vector | tuple[float, ...], is_dir: bool = False)
 
 
 @dataclass(frozen=True)
-class RelAxisOpShift:
-    amount: float | tuple[float, ...] | Vector
-
-
-@dataclass(frozen=True)
-class RelAxisOpRotate:
-    amount: float
-
-
-@dataclass(frozen=True)
 class RelAxis:
-    position: Vector | tuple[float, ...] = (0, 0, 0)
-    direction: Vector | tuple[float, ...] = (1, 0, 0)
-    ops: tuple[RelAxisOpShift | RelAxisOpRotate, ...] = ()
+    direction: Vector
+    normal_axis: Axis
     normal_side: int = 1
+    position: Vector = Vector(0, 0, 0)
 
     def __call__(self, amount: float | Vector | tuple[float, ...]) -> RelAxis:
-        return replace(self, ops=self.ops + (RelAxisOpShift(amount),))
+        if isinstance(amount, (float, int)):
+            v = self.direction.rotate(self.normal_axis, 90 * self.normal_side).normalized() * amount
+        else:
+            v = Vector(amount)
+        return replace(self, position=self.position + v)
 
     def rotate(self, amount: float) -> RelAxis:
-        return replace(self, ops=self.ops + (RelAxisOpRotate(amount),))
+        direction = self.direction.rotate(self.normal_axis, amount)
+        return replace(self, direction=direction)
 
-    def to_axis(self, plane: Plane) -> Axis:
-        position = to_vector(plane, self.position)
-        direction = to_vector(plane, self.direction, is_dir=True)
-
-        if self.ops:
-            ax = Axis(plane.origin, plane.z_dir)
-            for op in self.ops:
-                if isinstance(op, RelAxisOpShift):
-                    if isinstance(op.amount, (float, int)):
-                        v = direction.rotate(ax, 90 * self.normal_side).normalized() * op.amount
-                    else:
-                        v = to_vector(plane, op.amount, is_dir=True)
-                    position = position + v
-                elif isinstance(op, RelAxisOpRotate):
-                    direction = direction.rotate(ax, op.amount)
-
-        return Axis(position, direction)
+    def to_axis(self, plane: Plane | None = None) -> Axis:
+        result = Axis(self.position, self.direction)
+        if plane is not None:
+            result = result.located(plane.location)
+        return result
 
 
-AX = RelAxis(direction=(1, 0, 0))
-AY = RelAxis(direction=(0, 1, 0), normal_side=-1)
+AX = RelAxis(direction=Vector(1, 0, 0), normal_axis=Axis.Z)
+AY = RelAxis(direction=Vector(0, 1, 0), normal_side=-1, normal_axis=Axis.Z)
