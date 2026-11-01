@@ -52,7 +52,7 @@ def test_ppack_01_01() -> Part:
     part -= X(115 - 10) * make_slot(90, h=15, center=False, d=12, align=A.e)
 
     tl = build_line(X(9), Plane.YZ).append(
-        op_line(start=Angle(60), end=Y(8)), op_close(mirror=Axis.Y)
+        op_line(start=Angle(60), end=AX(8)), op_close(mirror=Axis.Y)
     )
     part -= tl.extrude(115)
 
@@ -73,7 +73,7 @@ def test_ppack_01_02() -> Part:
     part = fillet(edges, 1)
 
     il = build_line(X(42 / 2), Plane.XZ).append(
-        op_line(start=Angle(94), end=Y(37)), XX(0), op_fillet(3), op_close(Axis.Y)
+        op_line(start=Angle(94), end=AX(37)), XX(0), op_fillet(3), op_close(Axis.Y)
     )
     part -= il.revolvey()
 
@@ -110,7 +110,11 @@ def test_ppack_01_03() -> Part:
 
 def test_ppack_01_04() -> Part:
     l = build_line(Plane.XZ).append(
-        X(80 - 38 / 2 - 10), Y(7 - 30), op_fillet(5), X(10), Y(30), XX(0), op_fillet(10), op_close()
+        X(80 - 38 / 2 - 10),
+        Y(7 - 30),
+        op_fillet(5),
+        X(10), Y(30), XX(0),
+        op_fillet(10), op_close()
     )
     base = l.extrude(30, both=True)
 
@@ -134,8 +138,8 @@ def test_ppack_01_04() -> Part:
 def test_ppack_01_06() -> Part:
     l = build_line((44 / 2, 69 - 15)).append(
         op_arc(-45 - 90, r=-10).named('a'),
-        op_line(end=XX(15)),
-        YY(0),
+        op_line(end=AY(15)),
+        AX,
         op_fillet(12),
         op_close(Axis.Y),
     )
@@ -159,9 +163,9 @@ def test_ppack_01_06() -> Part:
 @pytest.mark.views((10, 0))
 def test_ppack_01_09() -> Part:
     cl = build_line(Plane.XZ).append(
-        op_line(start=Angle(-45), end=YY(-45)),
+        op_line(start=Angle(-45), end=AX(-45)),
         op_line(6, start=Angle(90)),
-        op_line(start=Angle(90), end=XX(0)).named('l'),
+        op_line(start=Angle(90), end=AY).named('l'),
     )
 
     p1 = split(make_slot(cl.l.length * 2, h=-6, center=False, d=75), Plane.YZ.offset(-1))
@@ -169,7 +173,7 @@ def test_ppack_01_09() -> Part:
     p1 = cl.normal_loc(tangent=-1) * p1
 
     l2 = build_line(Y(60), Plane.YZ).append(
-        op_arc(75 / 2 - 90, r=-15), op_line(end=XX(75 / 2)), YY(0), op_close(Axis.Y)
+        op_arc(75 / 2 - 90, r=-15), op_line(end=AY(75 / 2)), AX, op_close(Axis.Y)
     )
     p2 = mirror_add(l2.extrude(-13))
     p2 -= Pos(l2[0].arc_center) * R.X * Cylinder(26, d=12)
@@ -190,8 +194,8 @@ def test_23_T_24_curved_support() -> Part:
 
     l = build_line(Plane.XZ).append(
         op_arc(center=(77 - r1, 0), r=30, end=90 - 8),
-        op_line(end=XX(r1)),
-        op_move(end=YY(50)),
+        op_line(end=AY(r1)),
+        op_move(end=AX(50)),
         op_extend(end=5).reversed,
         op_trim(axis_offset(Axis.X, (125, 32)), add=True),
         op_fillet(66),
@@ -211,7 +215,6 @@ def test_23_T_24_curved_support() -> Part:
     return part
 
 
-@set_current
 def test_constrained_arcs1() -> Part:
     l = build_line(Plane.XZ).append(
         op_start((81, 57)),

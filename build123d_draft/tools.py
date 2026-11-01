@@ -65,7 +65,6 @@ __all__ = [
     'reversed_wire',
     'param_on_point',
     'trim_wire',
-    'PPos',
 ]
 
 O = Vector(0, 0, 0)
@@ -448,24 +447,6 @@ def trim_wire(wire: Wire | Edge, start: float = 0, end: float = 1) -> Wire:
     return rv
 
 
-class PPos(Pos):
-    def __init__(
-        self, X: float | None = None, Y: float | None = None, Z: float | None = None
-    ) -> None:
-        super().__init__()
-        self._initial = (X, Y, Z)
-
-    def combine_abs(self, v: Iterable[float] | None) -> Vector:
-        if v is None:
-            v = Vector(0, 0, 0)
-
-        r: list[float] = [0, 0, 0]
-        for idx, (iv, vv) in enumerate(zip(self._initial, v)):
-            r[idx] = iv if iv is not None else vv
-
-        return Vector(*r)
-
-
 def axis_offset(
     axis: Axis, X: float | Vector | tuple[float, ...] = 0, Y: float = 0, Z: float = 0
 ) -> Axis:
@@ -613,3 +594,8 @@ class RelAxis:
 
 AX = RelAxis(direction=Vector(1, 0, 0), normal_axis=Axis.Z)
 AY = RelAxis(direction=Vector(0, 1, 0), normal_side=-1, normal_axis=Axis.Z)
+
+
+def project_to_axis(ax: Axis, v: Vector) -> Vector:
+    d = ax.direction.normalized()
+    return ax.position + d * (v - ax.position).dot(d)

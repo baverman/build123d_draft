@@ -45,9 +45,9 @@ def test_24WC_12_tube_plug() -> Part:
     Example uses additional variables for animation purposes.
     """
     l1 = build_line(Plane.XZ).append(
-        op_start(X(150)), YY(111/2), X(-40), op_chamfer(8),
-        YY(65/2), X(-23), YY(84/2), op_fillet(8, 2),
-        XX(0), YY(0), op_fillet(10), op_close())
+        op_start(X(150)), AX(111/2), X(-40), op_chamfer(8),
+        AX(65/2), X(-23), AX(84/2), op_fillet(8, 2),
+        AY, AX, op_fillet(10), op_close())
     part = l1.revolvex()
 
     l2 = build_line(Plane.XZ.move(X(150-109))).append(
@@ -63,7 +63,7 @@ def test_24WC_12_tube_plug() -> Part:
 
     cl = build_line(Plane.XZ).append(
         op_start((150, 75/2), -Axis.X),
-        op_line(start=Angle(44/2), end=YY(20)), op_close(Axis.X))
+        op_line(start=Angle(44/2), end=AX(20)), op_close(Axis.X))
     cone = cl.revolvex()
     part -= cone
 

@@ -33,9 +33,9 @@ def gen_rot(name: str) -> Callable[[float], _gm.Rot]:
 X = gen_pos('X', _gm.Pos, default_zdir=(1, 0, 0))
 Y = gen_pos('Y', _gm.Pos, default_zdir=(0, 1, 0))
 Z = gen_pos('Z', _gm.Pos, default_zdir=(0, 0, 1))
-XX = gen_pos('X', PPos, default_zdir=(1, 0, 0))
-YY = gen_pos('Y', PPos, default_zdir=(0, 1, 0))
-ZZ = gen_pos('Z', PPos, default_zdir=(0, 0, 1))
+
+XX = AY
+YY = AX
 
 RX = gen_rot('X')
 RY = gen_rot('Y')

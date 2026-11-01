@@ -13,12 +13,11 @@ from typing import (
     Literal,
     Iterator,
     TypeGuard,
-    assert_type,
     cast,
 )
 
-from build123d import BuildLine, Sketch, Part, AngularDirection
-from build123d.geometry import Plane, Axis, Pos, Vector, Location, VectorLike
+from build123d import BuildLine, Sketch, Part
+from build123d.geometry import Plane, Axis, Pos, Vector, Location
 from build123d.topology import Shape, ShapeList, Wire, Edge, Vertex
 from build123d.topology.shape_core import TOPODS
 from build123d.topology.one_d import Mixin1D
@@ -26,32 +25,23 @@ from build123d.topology.composite import Curve
 from build123d.objects_curve import (
     Line,
     IntersectingLine,
-    TangentArc,
-    RadiusArc,
-    CenterArc,
     BaseEdgeObject,
 )
 from build123d.operations_sketch import make_face
 from build123d.operations_generic import mirror as b123_mirror, sweep, fillet, chamfer, SweepType
 from build123d.operations_part import extrude, revolve
-from build123d.build_enums import AngularDirection
 
-from .utils import (
-    _defined,
-    _defined_all,
-    assert_args,
-    debug,
-)
+from .utils import _defined, _defined_all
 from .tools import (
     make_axis,
     intersection,
-    PPos,
     param_on_point,
     trim_wire,
     reversed_wire,
     radius_arc,
     tangent_center,
     RelAxis,
+    project_to_axis,
 )
 
 __all__ = [
@@ -78,17 +68,13 @@ __all__ = [
 ]
 
 _P = ParamSpec('_P')
-VLike = Vector | Pos | PPos | Axis | tuple[float, ...]
-TLike = Vector | Pos | Axis | tuple[float, ...]
-BuildLineOp: TypeAlias = Vector | Pos | tuple[float, ...] | Shape[Any] | 'Op'
-UntilType = Curve | Edge | Wire | Axis | Plane | Pos
+VLike = Vector | tuple[float, ...]
+TLike = VLike | Axis
+BuildLineOp: TypeAlias = Vector | Pos | RelAxis | Axis | tuple[float, ...] | Shape[Any] | 'Op'
+UntilType = Curve | Edge | Wire | Axis | Plane | RelAxis
 
 
 def is_vlike(obj: object) -> TypeGuard[VLike]:
-    return isinstance(obj, (Vector, Pos, PPos, Axis, tuple))
-
-
-def is_point_like(obj: object) -> TypeGuard[Vector | tuple[float, ...]]:
     return isinstance(obj, (Vector, tuple))
 
 
@@ -99,9 +85,9 @@ class TrimOp:
 class build_line:
     def __init__(
         self,
-        start: Plane | VLike | None = None,
+        start: Plane | VLike | Pos | None = None,
         plane: Plane = Plane.XY,
-        tangent: TLike | None = None,
+        tangent: TLike | Pos | None = None,
     ) -> None:
         # TODO: use context to get current plane
         if isinstance(start, Plane):
@@ -127,24 +113,23 @@ class build_line:
     def to_local_vector(self, v: Vector) -> Vector:
         return v.transform(self.plane.forward_transform)
 
-    def to_vector(self, v: VLike, ref: Vector | None = None) -> Vector:
+    def to_vector(self, v: VLike | RelAxis | Pos, ref: Vector | None = None) -> Vector:
         if isinstance(v, Pos):
             if ref is None:
                 ref = self.e
             ref = ref.transform(self.plane.forward_transform)
-            if isinstance(v, PPos):
-                rv = v.combine_abs(ref)
-            else:
-                rv = v.position + ref
+            rv = v.position + ref
             return rv.transform(self.plane.reverse_transform)
         if isinstance(v, Axis):
             return v.position.transform(self.plane.reverse_transform)
+        elif isinstance(v, RelAxis):
+            return project_to_axis(v.to_axis(self.plane), ref or self.e)
         elif isinstance(v, tuple):
             return Vector(*v).transform(self.plane.reverse_transform)
 
         return v
 
-    def to_direction(self, v: TLike) -> Vector:
+    def to_direction(self, v: TLike | Pos) -> Vector:
         nv: Vector | Axis | tuple[float, ...]
         if isinstance(v, Pos):
             nv = tuple(v.position)
@@ -172,6 +157,9 @@ class build_line:
         if isinstance(op, (Vector, Pos, tuple)):
             cop: Vector | Pos | tuple[float, ...] = op
             self._shapes.append(Line(self.e, self.to_vector(cop)))
+        elif isinstance(op, (Axis, RelAxis)):
+            ax = self.to_axis(op)
+            self._shapes.append(Line(self.e, project_to_axis(ax, self.e)))
         elif isinstance(op, Shape):
             self._shapes.append(op)
         else:
@@ -259,14 +247,15 @@ class build_line:
     def loc_at(self, v: VLike) -> Location:
         return Location(self.plane.shift_origin(self.to_vector(v)))
 
-    def to_normal_plane(self, axis: Pos | Axis, start: Vector | None = None) -> Plane:
+    def to_normal_plane(self, axis: Pos | Axis | RelAxis, start: Vector | None = None) -> Plane:
         if isinstance(axis, Pos):
             z_dir = getattr(axis, 'default_zdir', None)
             if z_dir is None:
                 raise Exception('Position should have a default Z direction')
             return Plane(self.to_vector(axis, start), z_dir=self.to_direction(z_dir))
         else:
-            gaxis: Axis = axis.located(self.plane.location)
+            # TODO: optimize RelAxis case
+            gaxis = self.to_axis(axis)
             n = gaxis.direction.rotate(Axis(self.plane.origin, self.plane.z_dir), 90)
             return Plane(gaxis.position, z_dir=n)
 
@@ -375,7 +364,7 @@ def build_line_op(
 
 @build_line_op
 def op_start(
-    lb: build_line | None, start: VLike | None = None, tangent: TLike | None = None
+    lb: build_line | None, start: VLike | Pos | None = None, tangent: TLike | None = None
 ) -> None:
     if lb is None:
         return
@@ -400,10 +389,14 @@ class Angle:
 
 
 class Dir:
-    direction: TLike | Free
+    direction: TLike | Pos | Free
 
     def __init__(
-        self, X: float | TLike | Free = 1, Y: float = 0, Z: float = 0, angle: float | None = None
+        self,
+        X: float | TLike | Pos | Free = 1,
+        Y: float = 0,
+        Z: float = 0,
+        angle: float | None = None,
     ) -> None:
         self.angle = angle
         if isinstance(X, (float, int)):
@@ -426,19 +419,19 @@ class Dir:
 
 @dataclass
 class At:
-    position: VLike | Free | None = None
-    direction: TLike | Free | None = None
+    position: VLike | Pos | Free | None = None
+    direction: TLike | Pos | Free | None = None
     angle: float | None = None
 
     @staticmethod
     def parse(
         lb: build_line,
-        desc: VLike | AtDir | Free | None,
+        desc: VLike | Pos | AtDir | Free | None,
         default: tuple[Vector | Free, Vector | Free],
         default_refdir: Vector,
     ) -> tuple[Vector | None, Vector | None]:
-        position: VLike | Free | None = None
-        direction: TLike | Free | None = None
+        position: VLike | Pos | Free | None = None
+        direction: TLike | Pos | Free | None = None
         angle: float | None = None
 
         if isinstance(desc, Dir):
@@ -505,7 +498,7 @@ def op_line(
     if isinstance(end, (float, int)):
         return lb.add_shape(Line(nstart, nstart + tangent.normalized() * end))
 
-    if is_point_like(end):
+    if is_vlike(end):
         return lb.add_shape(Line(nstart, lb.to_vector(end, nstart)))
 
     nend: UntilType = end  # type: ignore[assignment]
@@ -514,8 +507,8 @@ def op_line(
 
 def _until_helper(lb: build_line, start: Vector, dir: Vector, until: UntilType) -> BaseEdgeObject:
     nuntil: Curve | Edge | Wire | Axis | Plane
-    if isinstance(until, Pos):
-        nuntil = lb.to_normal_plane(until, start)
+    if isinstance(until, RelAxis):
+        nuntil = lb.to_axis(until)
     else:
         nuntil = until
 
@@ -563,11 +556,11 @@ ArcRefs = Literal[Ref.TangentToLast, Ref.OnLast]
 @build_line_op
 def op_arc(
     lb: build_line | None,
-    end: float | VLike | AtDir | Free = FREE,
-    start: float | VLike | AtDir | ArcRefs | None = None,
+    end: float | VLike | Pos | AtDir | Free = FREE,
+    start: float | VLike | Pos | AtDir | ArcRefs | None = None,
     r: float | None = None,
     d: float | None = None,
-    center: VLike | Edge | RelAxis | None = None,
+    center: VLike | Pos | Edge | RelAxis | None = None,
     short: bool = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
@@ -690,10 +683,10 @@ def op_drop(lb: build_line | None, idx: int = 0) -> None:
 @build_line_op
 def op_close(
     lb: build_line | None,
-    both: Pos | Axis | Plane | None = None,
-    end: Pos | Axis | Plane | None = None,
-    start: Pos | Axis | Plane | None = None,
-    mirror: Pos | Axis | Plane | None = None,
+    both: Pos | Axis | RelAxis | Plane | None = None,
+    end: Pos | Axis | RelAxis | Plane | None = None,
+    start: Pos | Axis | RelAxis | Plane | None = None,
+    mirror: Pos | Axis | RelAxis | Plane | None = None,
 ) -> Mixin1D[Any] | None:
     if not lb:
         return None
@@ -705,13 +698,13 @@ def op_close(
         start = end = mirror
 
     nstart: Plane | None
-    if isinstance(start, (Axis, Pos)):
+    if isinstance(start, (Axis, RelAxis, Pos)):
         nstart = lb.to_normal_plane(start)
     else:
         nstart = start
 
     nend: Plane | None
-    if isinstance(end, (Axis, Pos)):
+    if isinstance(end, (Axis, RelAxis, Pos)):
         nend = lb.to_normal_plane(end)
     else:
         nend = end
@@ -778,7 +771,7 @@ def op_trim(
 
 @build_line_op
 def op_move(
-    lb: build_line | None, start: VLike | None = None, end: VLike | None = None
+    lb: build_line | None, start: VLike | RelAxis | None = None, end: VLike | RelAxis | None = None
 ) -> Mixin1D[Any] | None:
     if not lb:
         return None
