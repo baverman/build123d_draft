@@ -69,7 +69,6 @@ __all__ = [
 
 _P = ParamSpec('_P')
 VLike = Vector | tuple[float, ...]
-TLike = VLike | Axis
 BuildLineOp: TypeAlias = Vector | Pos | RelAxis | Axis | tuple[float, ...] | Shape[Any] | 'Op'
 UntilType = Curve | Edge | Wire | Axis | Plane | RelAxis
 
@@ -87,7 +86,7 @@ class build_line:
         self,
         start: Plane | VLike | Pos | None = None,
         plane: Plane = Plane.XY,
-        tangent: TLike | Pos | None = None,
+        tangent: VLike | Pos | None = None,
     ) -> None:
         # TODO: use context to get current plane
         if isinstance(start, Plane):
@@ -129,8 +128,8 @@ class build_line:
 
         return v
 
-    def to_direction(self, v: TLike | Pos) -> Vector:
-        nv: Vector | Axis | tuple[float, ...]
+    def to_direction(self, v: VLike | Pos | Axis | RelAxis) -> Vector:
+        nv: Vector | Axis | RelAxis | tuple[float, ...]
         if isinstance(v, Pos):
             nv = tuple(v.position)
         else:
@@ -138,9 +137,8 @@ class build_line:
 
         if isinstance(nv, Vector):
             return nv
-        elif isinstance(nv, Axis):
-            ax: Axis = nv.located(self.plane.location)
-            return ax.direction
+        elif isinstance(nv, (Axis, RelAxis)):
+            return self.to_axis(nv).direction
         elif isinstance(nv, tuple):
             origin = self.to_vector((0, 0, 0))
             return self.to_vector(nv) - origin
@@ -364,7 +362,7 @@ def build_line_op(
 
 @build_line_op
 def op_start(
-    lb: build_line | None, start: VLike | Pos | None = None, tangent: TLike | None = None
+    lb: build_line | None, start: VLike | Pos | None = None, tangent: VLike | Axis | None = None
 ) -> None:
     if lb is None:
         return
@@ -389,11 +387,11 @@ class Angle:
 
 
 class Dir:
-    direction: TLike | Pos | Free
+    direction: VLike | Pos | Free
 
     def __init__(
         self,
-        X: float | TLike | Pos | Free = 1,
+        X: float | VLike | Pos | Free = 1,
         Y: float = 0,
         Z: float = 0,
         angle: float | None = None,
@@ -420,7 +418,7 @@ class Dir:
 @dataclass
 class At:
     position: VLike | Pos | Free | None = None
-    direction: TLike | Pos | Free | None = None
+    direction: VLike | Pos | Free | None = None
     angle: float | None = None
 
     @staticmethod
@@ -431,7 +429,7 @@ class At:
         default_refdir: Vector,
     ) -> tuple[Vector | None, Vector | None]:
         position: VLike | Pos | Free | None = None
-        direction: TLike | Pos | Free | None = None
+        direction: VLike | Pos | Free | None = None
         angle: float | None = None
 
         if isinstance(desc, Dir):
@@ -560,7 +558,7 @@ def op_arc(
     start: float | VLike | Pos | AtDir | ArcRefs | None = None,
     r: float | None = None,
     d: float | None = None,
-    center: VLike | Pos | Edge | RelAxis | None = None,
+    center: VLike | Pos | Edge | RelAxis | Axis | None = None,
     short: bool = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
@@ -574,8 +572,8 @@ def op_arc(
     if isinstance(center, Edge):
         center_on = center
         ncenter = None
-    elif isinstance(center, RelAxis):
-        center_on = center.to_axis(lb.plane)
+    elif isinstance(center, (Axis, RelAxis)):
+        center_on = lb.to_axis(center)
         ncenter = None
     else:
         ncenter = lb.to_vector(center) if center is not None else None
@@ -649,7 +647,7 @@ def op_ellipse_arc(
     size: float,
     start_angle: float = 0,
     start: VLike | None = None,
-    tangent: TLike | Literal[True] = True,
+    tangent: VLike | Literal[True] = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
         return None
