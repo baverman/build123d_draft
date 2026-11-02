@@ -68,9 +68,10 @@ __all__ = [
 ]
 
 _P = ParamSpec('_P')
+AnyAxis = Axis | RelAxis
 VLike = Vector | tuple[float, ...]
-BuildLineOp: TypeAlias = Vector | Pos | RelAxis | Axis | tuple[float, ...] | Shape[Any] | 'Op'
-UntilType = Curve | Edge | Wire | Axis | Plane | RelAxis
+BuildLineOp: TypeAlias = Vector | Pos | AnyAxis | tuple[float, ...] | Shape[Any] | 'Op'
+UntilType = Curve | Edge | Wire | AnyAxis | Plane
 
 
 def is_vlike(obj: object) -> TypeGuard[VLike]:
@@ -112,24 +113,22 @@ class build_line:
     def to_local_vector(self, v: Vector) -> Vector:
         return v.transform(self.plane.forward_transform)
 
-    def to_vector(self, v: VLike | RelAxis | Pos, ref: Vector | None = None) -> Vector:
+    def to_vector(self, v: VLike | AnyAxis | Pos, ref: Vector | None = None) -> Vector:
         if isinstance(v, Pos):
             if ref is None:
                 ref = self.e
             ref = ref.transform(self.plane.forward_transform)
             rv = v.position + ref
             return rv.transform(self.plane.reverse_transform)
-        if isinstance(v, Axis):
-            return v.position.transform(self.plane.reverse_transform)
-        elif isinstance(v, RelAxis):
-            return project_to_axis(v.to_axis(self.plane), ref or self.e)
+        elif isinstance(v, (Axis | RelAxis)):
+            return project_to_axis(self.to_axis(v), ref or self.e)
         elif isinstance(v, tuple):
             return Vector(*v).transform(self.plane.reverse_transform)
 
         return v
 
-    def to_direction(self, v: VLike | Pos | Axis | RelAxis) -> Vector:
-        nv: Vector | Axis | RelAxis | tuple[float, ...]
+    def to_direction(self, v: VLike | Pos | AnyAxis) -> Vector:
+        nv: Vector | AnyAxis | tuple[float, ...]
         if isinstance(v, Pos):
             nv = tuple(v.position)
         else:
@@ -145,7 +144,7 @@ class build_line:
 
         assert False, f'Unsupported type {type(nv)}'
 
-    def to_axis(self, axis: Axis | RelAxis) -> Axis:
+    def to_axis(self, axis: AnyAxis) -> Axis:
         if isinstance(axis, Axis):
             return axis.located(self.plane.location)  # type: ignore[no-any-return]
         else:
@@ -245,7 +244,7 @@ class build_line:
     def loc_at(self, v: VLike) -> Location:
         return Location(self.plane.shift_origin(self.to_vector(v)))
 
-    def to_normal_plane(self, axis: Pos | Axis | RelAxis, start: Vector | None = None) -> Plane:
+    def to_normal_plane(self, axis: Pos | AnyAxis, start: Vector | None = None) -> Plane:
         if isinstance(axis, Pos):
             z_dir = getattr(axis, 'default_zdir', None)
             if z_dir is None:
@@ -558,7 +557,7 @@ def op_arc(
     start: float | VLike | Pos | AtDir | ArcRefs | None = None,
     r: float | None = None,
     d: float | None = None,
-    center: VLike | Pos | Edge | RelAxis | Axis | None = None,
+    center: VLike | Pos | Edge | AnyAxis | None = None,
     short: bool = True,
 ) -> Mixin1D[Any] | None:
     if lb is None:
@@ -681,10 +680,10 @@ def op_drop(lb: build_line | None, idx: int = 0) -> None:
 @build_line_op
 def op_close(
     lb: build_line | None,
-    both: Pos | Axis | RelAxis | Plane | None = None,
-    end: Pos | Axis | RelAxis | Plane | None = None,
-    start: Pos | Axis | RelAxis | Plane | None = None,
-    mirror: Pos | Axis | RelAxis | Plane | None = None,
+    both: Pos | AnyAxis | Plane | None = None,
+    end: Pos | AnyAxis | Plane | None = None,
+    start: Pos | AnyAxis | Plane | None = None,
+    mirror: Pos | AnyAxis | Plane | None = None,
 ) -> Mixin1D[Any] | None:
     if not lb:
         return None
@@ -727,7 +726,7 @@ def op_close(
 @build_line_op
 def op_trim(
     lb: build_line | None,
-    point: TrimOp | Axis | Vector | RelAxis | Edge | None = None,
+    point: TrimOp | AnyAxis | Vector | Edge | None = None,
     near_by: Vector | Shape[Any] | None = None,
     add: bool = False,
 ) -> Mixin1D[Any] | None:
@@ -769,7 +768,7 @@ def op_trim(
 
 @build_line_op
 def op_move(
-    lb: build_line | None, start: VLike | RelAxis | None = None, end: VLike | RelAxis | None = None
+    lb: build_line | None, start: VLike | AnyAxis | None = None, end: VLike | AnyAxis | None = None
 ) -> Mixin1D[Any] | None:
     if not lb:
         return None

@@ -224,6 +224,7 @@ def test_constrained_arcs1() -> Part:
     c1 = l.to_axis(AX(19)).intersect(l.l1)[0]
     l.append(
         X(-20),
+        # op_arc(center=c1, r=-29, start=OnLast, end=AX(19)),
         op_arc(center=c1, r=-29, start=90, end=-120).trims,
         op_trim(AX(19), add=True),
         op_fillet(5),
