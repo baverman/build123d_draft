@@ -4,8 +4,9 @@
 
 A selection of TTT models from WC streams or other sources.
 """
-from build123d import Plane, Pos, Part, Axis
+from build123d import *
 from build123d_draft import *
+from build123d_draft import ext
 from pytest import approx
 import pytest
 
@@ -58,7 +59,7 @@ def test_24WC_12_tube_plug() -> Part:
 
     hl = build_line(Plane.XZ).append(
         op_start(X(150)), X(-109), Y(88), op_fillet(30))
-    hole = hl.sweep(Circle(d=40))
+    hole = hl.sweep(ext.Circle(d=40))
     part -= hole
 
     cl = build_line(Plane.XZ).append(

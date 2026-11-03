@@ -8,21 +8,9 @@ section using `build_line` as a main draft tool.
 [tttt]: https://build123d.readthedocs.io/en/latest/tttt.html
 """
 
-from build123d import (
-    Part,
-    Axis,
-    Plane,
-    Pos,
-    Box,
-    extrude,
-    RectangleRounded,
-    Ellipse,
-    fillet,
-    split,
-    CounterSinkHole,
-    make_hull,
-)
+from build123d import *
 from build123d_draft import *
+from build123d_draft import ext
 from pytest import approx
 import pytest
 
@@ -98,10 +86,10 @@ def test_ppack_01_03() -> Part:
     part = l.extrude(8, both=True)
 
     loc1 = X(14 - 23) * -R.X
-    part += loc1 * Cylinder(23, r=8, align=A.u)
+    part += loc1 * ext.Cylinder(23, r=8, align=A.u)
     part -= loc1 * CounterSinkHole(5.5 / 2, 11.2 / 2, 23, 90)
 
-    c2 = X(95 - 18) * -R.X * Cylinder(18, r=8, align=A.u)
+    c2 = X(95 - 18) * -R.X * ext.Cylinder(18, r=8, align=A.u)
     part = part + c2 - c2.new(d=5.5)
 
     assert part.volume * densb == approx(96.13, abs=0.01)
@@ -118,13 +106,13 @@ def test_ppack_01_04() -> Part:
     )
     base = l.extrude(30, both=True)
 
-    c1 = Cylinder(7 + 21 - 8, d=38, align=A.d)
+    c1 = ext.Cylinder(7 + 21 - 8, d=38, align=A.d)
 
     _, edges = new_edges_add(c1, base)
     part = fillet(edges.filter_by(Plane.XY), 4)
     part &= X(-38 / 2) * Box(80 + 38, 38, 100, align=A.w)
 
-    c2 = Pos(Z=21 + 7) * Cylinder(8, d=26, align=A.u)
+    c2 = Pos(Z=21 + 7) * ext.Cylinder(8, d=26, align=A.u)
     part = part + c2 - c2.new(21 + 7, d=16)
 
     sloc = Pos(80 - 38 / 2, Z=7 - 30) * R.X
@@ -144,15 +132,15 @@ def test_ppack_01_06() -> Part:
         op_close(Axis.Y),
     )
 
-    base = l.extrude(22) - Pos(l.a.arc_center) * Cylinder(22, d=13, align=A.d)
+    base = l.extrude(22) - Pos(l.a.arc_center) * ext.Cylinder(22, d=13, align=A.d)
     base = mirror_add(base, Plane.YZ)
 
-    c = RZ(-90) * Cylinder(36, d=30, align=A.d)
+    c = RZ(-90) * ext.Cylinder(36, d=30, align=A.d)
     _, edges = new_edges_add(c, Box(50, 30, 22, align=A.sd))
     part = fillet(edges.filter_by(Plane.XY), 6)
     part = base + (part & Box(30, 60, 100, align=A.d))
 
-    part -= Cylinder(36, d=12, align=A.d)
+    part -= ext.Cylinder(36, d=12, align=A.d)
     part -= Box(4, 9, 36, align=A.sd)
     part -= Pos(Y=69 - 15, Z=6 + 5) * Box(44 + 10 * 2, 42, 10, align=A.n)
 
@@ -169,14 +157,14 @@ def test_ppack_01_09() -> Part:
     )
 
     p1 = split(make_slot(cl.l.length * 2, h=-6, center=False, d=75), Plane.YZ.offset(-1))
-    p1 -= X(cl.l.length - 75 / 2) * Cylinder(12, d=33)
+    p1 -= X(cl.l.length - 75 / 2) * ext.Cylinder(12, d=33)
     p1 = cl.normal_loc(tangent=-1) * p1
 
     l2 = build_line(Y(60), Plane.YZ).append(
         op_arc(75 / 2 - 90, r=-15), op_line(end=AY(75 / 2)), AX, op_close(Axis.Y)
     )
     p2 = mirror_add(l2.extrude(-13))
-    p2 -= Pos(l2[0].arc_center) * R.X * Cylinder(26, d=12)
+    p2 -= Pos(l2[0].arc_center) * R.X * ext.Cylinder(26, d=12)
 
     l3 = build_line().append(Y(-75 / 2), X(-69), Y(75), XX(0), op_fillet(17, 2), op_close())
     p3 = l3.extrude(13)
@@ -237,7 +225,7 @@ def test_constrained_arcs1() -> Part:
         op_chamfer(5, closed=True),
     )
 
-    face = l.face() - l.loc_at((14, 19 + 14)) * Circle(d=14)
+    face = l.face() - l.loc_at((14, 19 + 14)) * ext.Circle(d=14)
 
     assert face.area == approx(2765.79, abs=0.01)
     return face

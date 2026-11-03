@@ -1,7 +1,7 @@
 import functools
 import math
-from dataclasses import dataclass, field, replace
-from typing import Any, Collection, Sequence, Iterable
+from dataclasses import dataclass, replace
+from typing import Any, Collection, Sequence
 
 import OCP  # type: ignore[import-untyped]
 from OCP.BRep import BRep_Tool  # type: ignore[import-untyped]
@@ -9,7 +9,7 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge  # type: ignore[import-un
 from OCP.Geom2d import Geom2d_TrimmedCurve  # type: ignore[import-untyped]
 from OCP.Precision import Precision  # type: ignore[import-untyped]
 
-from build123d.geometry import Vector, Pos, Location, Plane, Axis, RotationLike, VectorLike
+from build123d.geometry import Vector, Pos, Location, Plane, Axis, VectorLike
 from build123d.topology import (
     Wire,
     Edge,
@@ -25,11 +25,10 @@ from build123d.topology import (
 from build123d.topology.shape_core import TOPODS
 from build123d.operations_generic import mirror, split, MirrorType
 from build123d.operations_part import extrude
-from build123d.objects_sketch import Rectangle, Circle as Circle_orig, SlotCenterPoint
-from build123d.objects_part import Cylinder as Cylinder_orig
+from build123d.objects_sketch import Rectangle, Circle, SlotCenterPoint
 from build123d.build_common import LocationList
 from build123d.objects_curve import Line
-from build123d.build_enums import Align, Mode, Align2D, Align3D
+from build123d.build_enums import Align, Align2D, Align3D
 
 from .utils import _defined
 
@@ -44,8 +43,6 @@ __all__ = [
     'axis_offset',
     'cbore',
     'cbore_d',
-    'Circle',
-    'Cylinder',
     'ext_point_with_circle_intersection',
     'fillet_tool',
     'force_fillet',
@@ -87,7 +84,7 @@ def fillet_tool(r: float, length: float, align: SAlign2D) -> Part:
     return extrude(Rectangle(r * 2, r * 2) - Circle(r, align=align), length)
 
 
-def ext_point_with_circle_intersection(p: VectorLike, c: Circle_orig) -> ShapeList[Vertex]:
+def ext_point_with_circle_intersection(p: VectorLike, c: Circle) -> ShapeList[Vertex]:
     l = Line([c.center(), p])
     cc = Pos(l @ 0.5) * Circle(l.length / 2)
     return (c & cc).vertices()
@@ -175,86 +172,6 @@ def aligned(obj: Shape[TOPODS], align: Align2D | Align3D) -> Shape[TOPODS]:
 def new_edges_add(*parts: Compound) -> tuple[Compound, ShapeList[Edge]]:
     c = parts[0] + parts[1:]
     return c, new_edges(*parts, combined=c)
-
-
-class Cylinder(Cylinder_orig):
-    def __init__(
-        self,
-        radius: float,
-        height: float | None = None,
-        arc_size: float = 360,
-        rotation: RotationLike = (0, 0, 0),
-        align: SAlign3D = (
-            Align.CENTER,
-            Align.CENTER,
-            Align.CENTER,
-        ),
-        mode: Mode = Mode.ADD,
-        d: float | None = None,
-        r: float | None = None,
-    ) -> None:
-        if d is not None:
-            h = radius
-            radius = d / 2
-        elif r is not None:
-            h = radius
-            radius = r
-        else:
-            assert height
-            h = height
-        super().__init__(radius, h, arc_size=arc_size, rotation=rotation, align=align, mode=mode)
-
-    def new(
-        self,
-        radius: float | None = None,
-        height: float | None = None,
-        d: float | None = None,
-        r: float | None = None,
-    ) -> Cylinder:
-        if d is not None:
-            if radius is not None:
-                height = radius
-            radius = d / 2
-        elif r is not None:
-            if radius is not None:
-                height = radius
-            radius = r
-        if height is None:
-            height = self.cylinder_height
-        assert radius
-        return self.location * Cylinder(radius, height, align=self.align)
-
-
-class Circle(Circle_orig):
-    align: tuple[Align, Align]
-
-    def __init__(
-        self,
-        radius: float | None = None,
-        align: SAlign2D = (Align.CENTER, Align.CENTER),
-        mode: Mode = Mode.ADD,
-        d: float | None = None,
-    ):
-        if d is not None:
-            radius = d / 2
-        assert radius
-        super().__init__(radius, align=align, mode=mode)
-
-    def cylinder(
-        self,
-        height: float,
-        d: float | None = None,
-        r: float | None = None,
-        align: SAlign3D = Align.MIN,
-    ) -> Cylinder:
-        radius = self.radius
-        if d is not None:
-            radius = d / 2
-        elif r is not None:
-            radius = r
-        za = tuplify(align, 3)[2]  # type: ignore[index]
-        align = self.align[0], self.align[1], za
-        return self.location * Cylinder(radius, height, align=align)
 
 
 def force_fillet(part: Shape[Any], edges: Collection[Edge], radius: float) -> Part:
@@ -530,14 +447,14 @@ def to_curve2d(edge: Edge, plane: Plane) -> tuple[object, tuple[float, float]]:
 def tangent_center(
     tangent: Edge, center_on: Edge | Axis, radius: float, plane: Plane
 ) -> tuple[float, Vector, Vector] | None:
-    tcurve, tprange = to_curve2d(tangent, plane)
+    tcurve, _tprange = to_curve2d(tangent, plane)
     off_tcurve = OCP.Geom2d.Geom2d_OffsetCurve(tcurve, -radius)
 
     cpoints: list[Vector] = []
     if isinstance(center_on, Axis):
         cpoints.extend(tangent.intersect(center_on) or [])
     else:
-        ccurve, cprange = to_curve2d(center_on, plane)
+        ccurve, _cprange = to_curve2d(center_on, plane)
 
         inter = OCP.Geom2dAPI.Geom2dAPI_InterCurveCurve(off_tcurve, ccurve)
 

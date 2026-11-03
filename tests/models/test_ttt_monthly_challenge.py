@@ -8,9 +8,9 @@ part mass. It's an easiest way to train your skills.
 
 [ttt-challenges]: https://www.tootalltoby.com/Leaderboard/
 """
-from build123d import (Pos, Plane, fillet, Box, Axis, CounterSinkHole, revolve, offset, split,
-    make_face, Keep, PolarLocations, extrude, Side, Part, Vector, make_hull, RectangleRounded)
+from build123d import *
 from build123d_draft import *
+from build123d_draft import ext
 from pytest import approx
 import pytest
 
@@ -44,12 +44,12 @@ def test_24_04_LB1_u_joint_fork() -> Part:
     part -= mirror_add(l2.extrude(100))
 
     loc = Pos(X=70/2, Z=51-15) * R.X
-    part += loc * Cylinder(70/2-36/2, r=15, align=A.u)
+    part += loc * ext.Cylinder(70/2-36/2, r=15, align=A.u)
     part -= loc * CounterSinkHole(13/2, 19/2, 50, 100)
     part = mirror_add(part, Plane.YZ)
 
     b = 51 - 15 - 65
-    c = Z(b) * Cylinder(abs(-5 - b), d=32, align=A.d)
+    c = Z(b) * ext.Cylinder(abs(-5 - b), d=32, align=A.d)
     part, edges = new_edges_add(c, part)
     part = fillet(edges, 3)
     part -= mirror_add(Y(-38/2) * Box(100, 5, 14, align=A.nu))
@@ -68,13 +68,13 @@ def test_22_T_32_pivot_plate() -> Part:
         op_close(Axis.X)
     )
     p1 = l.extrude(-0.25)
-    p1 -= Pos(l.a.arc_center) * R.Y * Cylinder(1, d=0.5)
+    p1 -= Pos(l.a.arc_center) * R.Y * ext.Cylinder(1, d=0.5)
     p1 = mirror_add(Y(-5/2) * p1)
 
     part = p1 + Box(4, 5, 0.25, align=A.wd)
     part += X(4) * Box(2, 3, 1.25, align=A.ed)
 
-    c = X(3) * Cylinder(2, d=1.75, align=A.d)
+    c = X(3) * ext.Cylinder(2, d=1.75, align=A.d)
     part = part + c - c.new(d=0.625)
 
     assert part.volume*densb*LBF == approx(1.543, abs=0.001)
@@ -108,7 +108,7 @@ def test_24_05_LB1_clamp_bracket() -> Part:
     p2 -= Pos(44/2, -55, 26) * R.X * cbore(12, 5, 6, 44)
 
     part = p1 + p2
-    part -= Cylinder(41, d=42, align=A.d)
+    part -= ext.Cylinder(41, d=42, align=A.d)
     part -= Box(8, 55+15, 41, align=A.nd)
 
     assert part.volume*densa == approx(183.03, abs=0.01)
@@ -133,7 +133,7 @@ def test_24_05_LB2_chamber() -> Part:
                        keep=Keep.BOTTOM))
 
     sl = make_slot(6.5, h=1.75, r=0.375)
-    p2 = sl - sl.center_locs * Cylinder(1.75, d=.41, align=A.u)
+    p2 = sl - sl.center_locs * ext.Cylinder(1.75, d=.41, align=A.u)
 
     part = p1 + (RZ(45) * p2 + RZ(90+45) * p2 - bowl)
 
@@ -141,8 +141,8 @@ def test_24_05_LB2_chamber() -> Part:
     rib = loch * Box(5.5/2, 0.25, 3.5-0.75*2, align=A.wd)
     part += PolarLocations(0, 3, 60) * (bowl & rib)
 
-    part += loch * Cylinder(3.5-0.5-0.75, d=1.25, align=A.d)
-    part -= Cylinder(3.5-0.5, d=0.75, align=A.d)
+    part += loch * ext.Cylinder(3.5-0.5-0.75, d=1.25, align=A.d)
+    part -= ext.Cylinder(3.5-0.5, d=0.75, align=A.d)
 
     assert part.volume*densc*LBF == approx(9.1806, abs=0.0001)
     return part
@@ -162,11 +162,11 @@ def test_24_05_LB3_arm_housing() -> Part:
     # TODO: transform slot center locations
     sl = X(72/2) * -R.X * make_slot(78*2, h=12, d=40)
     p1 = split(p1, Plane.YZ.offset(72/2-12), keep=Keep.BOTTOM) + (p1 & sl)
-    p1 -= Pos(72/2, Z=78) * R.X * Cylinder(24, d=19)
+    p1 -= Pos(72/2, Z=78) * R.X * ext.Cylinder(24, d=19)
     p1 = mirror_add(p1, Plane.YZ)
 
-    c1 = R.X * Cylinder(55, d=66)
-    c2 = Cylinder(40, d=36, align=A.u)
+    c1 = R.X * ext.Cylinder(55, d=66)
+    c2 = ext.Cylinder(40, d=36, align=A.u)
     part = p1 + c1 + c2 - c2.new(d=18) - c1.new(d=40)
 
     assert part.volume*densb == approx(538.04, abs=0.01)
@@ -179,9 +179,9 @@ def test_24_07_LB3_adj_base() -> Part:
     [Source](https://www.tootalltoby.com/challenge/2024-07/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/F_LEADERBOARD_CHALLENGE_MODEL_3_IMAGE_-_JULY.png).
     """
-    c1 = X(127) * Circle(d=25)
-    c2 = Circle(d=45)
-    c3 = Pos(Vector(1, 0).rotate(Axis.Z, 60) * 127) * Circle(d=25)
+    c1 = X(127) * ext.Circle(d=25)
+    c2 = ext.Circle(d=45)
+    c3 = Pos(Vector(1, 0).rotate(Axis.Z, 60) * 127) * ext.Circle(d=25)
 
     base_sk = make_hull((c1 + c2).edges()) + make_hull((c2 + c3).edges())
     base_sk = fillet(base_sk.vertices().group_by(Axis.X)[2], 13)
@@ -213,7 +213,7 @@ def test_24_07_LB1_foot_holder() -> Part:
     [Source](https://www.tootalltoby.com/challenge/2024-07/drawings/).
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/D_LEADERBOARD_CHALLENGE_MODEL_1_IMAGE_-_JULY.png).
     """
-    c = Cylinder(12, d=136, align=A.d)
+    c = ext.Cylinder(12, d=136, align=A.d)
     c -= mirror_add(Pos(Y=105/2, Z=12) * cbore_d(16, 5, 8, 12))
 
     loc = X(-62/2)
@@ -240,7 +240,7 @@ def test_24_04_LB2_rod_end_mount() -> Part:
     [Draft](https://www.tootalltoby.com/media/challenges/events/models/E_LEADERBOARD_CHALLENGE_MODEL_2_IMAGE-APRIL.png).
     """
 
-    c = R.X * Cylinder(1.375, d=1.125, align=A.d)
+    c = R.X * ext.Cylinder(1.375, d=1.125, align=A.d)
     part = c + c.new(7-1, d=0.875) + c.new(7, d=0.5)
     cut = X(7) * Z(0.375/2) * Box(.75, 1, 1, align=A.de)
     part -= mirror_add(cut, Plane.XY)
@@ -261,7 +261,7 @@ def test_24_04_LB2_rod_end_mount() -> Part:
     )
     part += l2.extrude(.25/2, both=True)
 
-    c = Cylinder(1.5, r=r)
+    c = ext.Cylinder(1.5, r=r)
     part = part + c - c.new(d=1.5)
 
     assert part.volume*densb*LBF == approx(0.675, abs=0.00001)
@@ -321,11 +321,11 @@ def test_2024_03_10_offset_support() -> Part:
     )
     part = l.extrude(5, both=True)
 
-    c = Pos(80+33, 0, 70) * Cylinder(30, d=35, align=A.u)
+    c = Pos(80+33, 0, 70) * ext.Cylinder(30, d=35, align=A.u)
     part = part + c - c.location * cbore_d(25, 7, 15, 30)
 
     part += extrude(RectangleRounded(69, 75, 8, align=A.w), 15)
-    part -= mirror_add(Pos(33, 40/2) * Cylinder(15, d=12, align=A.d))
+    part -= mirror_add(Pos(33, 40/2) * ext.Cylinder(15, d=12, align=A.d))
 
     lc = build_line(Plane.XZ).append(
         op_line(start=At((12,), angle=30), end=AX(5)),
@@ -351,7 +351,7 @@ def test_2024_03_12_side_spacer() -> Part:
     )
     part: Part = l.extrude(20)
 
-    c = X(60+196) * Cylinder(35, r=95, align=A.d)
+    c = X(60+196) * ext.Cylinder(35, r=95, align=A.d)
     part = part + c - c.new(r=75)
     part = split(part, Plane.YZ.offset(c.location.position.X),
                  keep=Keep.BOTTOM)
@@ -360,7 +360,7 @@ def test_2024_03_12_side_spacer() -> Part:
     s2 = -R.Y * make_hslot((60+50, 0), h=50, r=40, both=True)
     part = part + Z(40) * (s1 & s2)
 
-    part -= Pos(60) * Cylinder(80, d=42, align=A.d)
+    part -= Pos(60) * ext.Cylinder(80, d=42, align=A.d)
     part -= mirror_add(Pos(0, -50, 40) * -R.Y * CounterSinkHole(
         33/2, 33/2+8, 50, 90))
 

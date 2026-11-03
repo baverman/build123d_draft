@@ -6,7 +6,7 @@ from pytest import approx
 
 from build123d import *
 from build123d.topology import Shape
-from build123d_draft import *  # type: ignore[assignment]
+from build123d_draft import *
 from build123d_draft.testing import *
 
 

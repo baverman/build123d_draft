@@ -9,7 +9,7 @@ Models here are augmented for spoil-free results.
 [ttt-practice]: https://www.tootalltoby.com/practice/
 """
 from build123d import *
-from build123d_draft import *  # type: ignore[assignment]
+from build123d_draft import *
 from pytest import approx
 import pytest
 
