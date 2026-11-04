@@ -23,6 +23,10 @@ python_version = "3.11"
 strict = true
 packages = ["build123d_draft", "tests"]
 
+# [[tool.mypy.overrides]]
+# module = ["anytree", "anytree.*"]
+# follow_untyped_imports = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

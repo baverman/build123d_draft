@@ -192,7 +192,7 @@ def test_23_T_24_curved_support() -> Part:
 
     p1 = l.extrude(11 / 2, both=True)
 
-    c1, c2 = Circle(r1), X(125) * Circle(r2)
+    c1, c2 = ext.Circle(r1), X(125) * ext.Circle(r2)
     p2 = extrude(make_hull((c1 + c2).edges()), 11)
 
     cl1, cl2 = c1.cylinder(60), c2.cylinder(32)
@@ -212,15 +212,15 @@ def test_constrained_arcs1() -> Part:
     c1 = l.to_axis(AX(19)).intersect(l.l1)[0]
     l.append(
         X(-20),
-        # op_arc(center=c1, r=-29, start=OnLast, end=AX(19)),
-        op_arc(center=c1, r=-29, start=90, end=-120).trims,
+        op_arc(center=c1, r=-29, start=On(Last), end=-120).trims,
+        # op_arc(center=c1, r=-29, start=90, end=-120).trims,
         op_trim(AX(19), add=True),
         op_fillet(5),
         Y(32),
         X(14),
         op_chamfer(7, count=2),
         op_line(start=Angle(-10), end=50),
-        op_arc(start=TangentToLast, end=(81 - 29, 57), r=19),
+        op_arc(start=TangentTo(Last), end=(81 - 29, 57), r=19),
         X(29),
         op_chamfer(5, closed=True),
     )

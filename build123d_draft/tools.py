@@ -296,7 +296,7 @@ def param_on_point(
         c, pr = edge_curve(e)
         poc = OCP.GeomAPI.GeomAPI_ProjectPointOnCurve(pt, c)
         p = poc.LowerDistanceParameter()
-        if pr[0] <= p <= pr[1]:
+        if pr[0] <= p <= pr[1] or isclose_b(pr[0], p) or isclose_b(pr[1], p):
             candidates.append((poc.LowerDistance(), U + abs(pr[int(not e.is_forward)] - p)))
         U += abs(pr[0] - pr[1])
 
@@ -445,17 +445,25 @@ def to_curve2d(edge: Edge, plane: Plane) -> tuple[object, tuple[float, float]]:
 
 
 def tangent_center(
-    tangent: Edge, center_on: Edge | Axis, radius: float, plane: Plane
-) -> tuple[float, Vector, Vector] | None:
-    tcurve, _tprange = to_curve2d(tangent, plane)
-    off_tcurve = OCP.Geom2d.Geom2d_OffsetCurve(tcurve, -radius)
-
+    tangent: Edge | Axis, center_on: Edge | Axis, radius: float, plane: Plane
+) -> tuple[float | None, Vector, Vector] | None:
     cpoints: list[Vector] = []
-    if isinstance(center_on, Axis):
+    if isinstance(tangent, Axis):
+        normal_axis = Axis(plane.origin, plane.z_dir)
+        off_axis = RelAxis(
+            position=tangent.position, direction=tangent.direction, normal_axis=normal_axis
+        )(radius).to_axis()
+        ip = off_axis.intersect(center_on)
+        if isinstance(ip, Vector):
+            cpoints.append(ip)
+        elif isinstance(ip, ShapeList):
+            cpoints.extend(Vector(it) for it in ip.vertices())
+    elif isinstance(center_on, Axis):
         cpoints.extend(tangent.intersect(center_on) or [])
     else:
+        tcurve, _tprange = to_curve2d(tangent, plane)
+        off_tcurve = OCP.Geom2d.Geom2d_OffsetCurve(tcurve, -radius)
         ccurve, _cprange = to_curve2d(center_on, plane)
-
         inter = OCP.Geom2dAPI.Geom2dAPI_InterCurveCurve(off_tcurve, ccurve)
 
         for i in range(1, inter.NbPoints() + 1):
@@ -463,19 +471,29 @@ def tangent_center(
             c = Vector(p.X(), p.Y()).transform(plane.reverse_transform)
             cpoints.append(c)
 
-    candidates = []
-    for c in cpoints:
-        # v, t = tangent_point(tangent, c)
-        p = param_on_point(tangent, c)
-        if p:
-            candidates.append(p)
-
-    if not candidates:
+    if not cpoints:
         return None
 
-    candidates.sort()
-    p = candidates[0]
-    return p, tangent.position_at(p), tangent.tangent_at(p)
+    if isinstance(tangent, Axis):
+        vcandidates = []
+        for it in cpoints:
+            vcandidates.append(project_to_axis(tangent, it) - tangent.position)
+
+        d = tangent.direction
+        vcandidates.sort(key=lambda x: (x.dot(d) < 0, x.length))
+        vc = vcandidates[0]
+        return None, tangent.position + vc, tangent.direction
+    else:
+        candidates = []
+        for c in cpoints:
+            # v, t = tangent_point(tangent, c)
+            p = param_on_point(tangent, c)
+            if p:
+                candidates.append(p)
+
+        candidates.sort()
+        p = candidates[0]
+        return p, tangent.position_at(p), tangent.tangent_at(p)
 
 
 def to_vector(plane: Plane, v: Vector | tuple[float, ...], is_dir: bool = False) -> Vector:
@@ -493,7 +511,11 @@ class RelAxis:
 
     def __call__(self, amount: float | Vector | tuple[float, ...]) -> RelAxis:
         if isinstance(amount, (float, int)):
-            v = self.direction.rotate(self.normal_axis, 90 * self.normal_side).normalized() * amount
+            v = (
+                self.normal_axis.direction.cross(self.direction).normalized()
+                * amount
+                * self.normal_side
+            )
         else:
             v = Vector(amount)
         return replace(self, position=self.position + v)

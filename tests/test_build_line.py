@@ -108,15 +108,27 @@ def test_center_arc() -> None:
 
 
 def test_trimmed_tangent_arc() -> None:
-    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=(20, 10), r=10))
+    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentTo(Last), end=(20, 10), r=10))
     assert_bb(l.wire(), (0, 0, 0), (20, 0, 10))
 
     cl = Edge.make_line((10, 0, -20), (10, 0, 20))
-    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=-90, r=-10, center=cl))
+    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentTo(Last), end=-90, r=-10, center=cl))
     assert_bb(l.wire(), (0, 0, -10), (20, 0, 0))
 
-    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentToLast, end=-90, r=-10, center=AY(10)))
+    l = build_line(Plane.XZ).append((30, 0), op_arc(start=TangentTo(Last), end=-90, r=-10, center=AY(10)))
     assert_bb(l.wire(), (0, 0, -10), (20, 0, 0))
+
+    l = build_line(Plane.XZ).append(op_arc(start=TangentTo(AX), end=(20, 10), r=10))
+    assert_bb(l.wire(), (10, 0, 0), (20, 0, 10))
+
+
+@set_current
+def test_trimmed_arc() -> None:
+    l = build_line(Plane.XZ).append(op_arc(start=AX, end=90, r=10, center=(10, 8)))
+    assert_bb(l.wire(), (10, 0, 0), (20, 0, 18))
+
+    l = build_line(Plane.XZ).append(op_arc(start=AX, end=90, r=-10, center=(10, 8)))
+    assert_bb(l.wire(), (0, 0, 0), (10, 0, 18))
 
 
 if __name__ == '__main__':

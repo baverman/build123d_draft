@@ -18,13 +18,22 @@ CenterArc
 
 @set_current
 def find_circle():
-    l = build_line(Plane.XZ).append(
-        op_line(start=At((14, 19 + 32), angle=-10), end=100))
-    ec = Edge.make_circle(19, l.plane.shift_origin(l.to_vector((81 - 29, 57))))
-    sadd(ec=ec)
-    v, t = tangent_center(l.plane, l[-1].edge(), ec, 19)
-    l.append(op_arc(start=At(v, t), end=(81-29, 57)))
-    return l
+    l = build_line(Plane.XZ)
+    ec = Edge.make_circle(10, l.plane)
+    ax = -AX(-8).to_axis(l.plane)
+    a, b = ec.intersect(ax).vertices()
+    a.color = (1, 0, 0)
+    b.color = (0, 1, 0)
+    p1 = param_on_point(ec, a)
+    p2 = param_on_point(ec, b)
+    t1 = trim_wire(ec, p1, p2)
+    t1.color = (0.8, 0, 0)
+    t2 = trim_wire(ec, p2, p1)
+    t2.color = (0, 0.8, 0)
+    sadd(ec=ec, t1=t1, t2=t2, a=a, b=b)
+    normal = l.to_vector((0, 0, 1))
+    print(t1 % 0, t2 % 0)
+    print(normal.dot(ax.direction.cross(t1 % 0)), normal.dot(ax.direction.cross(t2 % 0)))
 
     # e = build_line().append(
     #     op_start(tangent=-Axis.X),

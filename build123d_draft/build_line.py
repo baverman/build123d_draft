@@ -63,13 +63,14 @@ __all__ = [
     'op_start',
     'op_trim',
     'TrimOp',
-    'TangentToLast',
-    'OnLast',
+    'TangentTo',
+    'On',
+    'Last',
 ]
 
 _P = ParamSpec('_P')
 AnyAxis = Axis | RelAxis
-VLike = Vector | tuple[float, ...]
+VLike = Vector | Vertex | tuple[float, ...]
 BuildLineOp: TypeAlias = Vector | Pos | AnyAxis | tuple[float, ...] | Shape[Any] | 'Op'
 UntilType = Curve | Edge | Wire | AnyAxis | Plane
 
@@ -114,7 +115,9 @@ class build_line:
         return v.transform(self.plane.forward_transform)
 
     def to_vector(self, v: VLike | AnyAxis | Pos, ref: Vector | None = None) -> Vector:
-        if isinstance(v, Pos):
+        if isinstance(v, tuple):
+            return Vector(*v).transform(self.plane.reverse_transform)
+        elif isinstance(v, Pos):
             if ref is None:
                 ref = self.e
             ref = ref.transform(self.plane.forward_transform)
@@ -122,8 +125,8 @@ class build_line:
             return rv.transform(self.plane.reverse_transform)
         elif isinstance(v, (Axis | RelAxis)):
             return project_to_axis(self.to_axis(v), ref or self.e)
-        elif isinstance(v, tuple):
-            return Vector(*v).transform(self.plane.reverse_transform)
+        elif isinstance(v, Vertex):
+            return Vector(v)
 
         return v
 
@@ -470,12 +473,20 @@ AtDir = At | Dir | Angle
 
 
 class Ref(enum.Enum):
-    TangentToLast = enum.auto()
-    OnLast = enum.auto()
+    Last = enum.auto()
 
 
-TangentToLast: Literal[Ref.TangentToLast] = Ref.TangentToLast
-OnLast: Literal[Ref.OnLast] = Ref.OnLast
+Last = Ref.Last
+
+
+@dataclass(frozen=True)
+class TangentTo:
+    value: Edge | AnyAxis | Ref | str | int
+
+
+@dataclass(frozen=True)
+class On:
+    value: Edge | AnyAxis | Ref | str | int
 
 
 @build_line_op
@@ -547,14 +558,47 @@ def op_extend(
     return l
 
 
-ArcRefs = Literal[Ref.TangentToLast, Ref.OnLast]
+AnyConstraint = TangentTo | On | AnyAxis | Edge | Ref | str
+
+
+@dataclass(frozen=True)
+class Constraint:
+    value: Axis | Edge
+    is_tangent: bool
+
+    @staticmethod
+    def parse(lb: build_line, obj: AnyConstraint) -> 'Constraint':
+        nobj: On | TangentTo
+        if isinstance(obj, (Ref, str, Axis, RelAxis, Edge)):
+            nobj = On(obj)
+        else:
+            nobj = obj
+
+        is_tangent = isinstance(nobj, TangentTo)
+        value = nobj.value
+
+        nvalue: Edge | Axis
+        if isinstance(value, Ref):
+            nvalue = lb._shapes[-1]
+        elif isinstance(value, str):
+            nvalue = lb._named[value]
+        elif isinstance(value, int):
+            nvalue = lb._shapes[value]
+        elif isinstance(value, int):
+            nvalue = lb._shapes[value]
+        elif isinstance(value, (Axis, RelAxis)):
+            nvalue = lb.to_axis(value)
+        else:
+            nvalue = value
+
+        return Constraint(nvalue, is_tangent)
 
 
 @build_line_op
 def op_arc(
     lb: build_line | None,
     end: float | VLike | Pos | AtDir | Free = FREE,
-    start: float | VLike | Pos | AtDir | ArcRefs | None = None,
+    start: float | VLike | Pos | AtDir | AnyConstraint | None = None,
     r: float | None = None,
     d: float | None = None,
     center: VLike | Pos | Edge | AnyAxis | None = None,
@@ -577,14 +621,17 @@ def op_arc(
     else:
         ncenter = lb.to_vector(center) if center is not None else None
 
+    normal = lb.to_vector((0, 0, 1))
     lbt = lb.tangent()
 
     if isinstance(start, (float, int)):
         start = Angle(start)
 
-    if isinstance(start, Ref):
+    if isinstance(start, AnyConstraint):
         spoint = sdir = None
+        scon = Constraint.parse(lb, start)
     else:
+        scon = None
         spoint, sdir = At.parse(lb, start, (lb.e, lbt), lbt)
         if r is not None and ncenter is not None:
             spoint = None
@@ -596,17 +643,42 @@ def op_arc(
     if r is not None and ncenter is not None:
         epoint = None
 
-    if start == Ref.TangentToLast and r is not None:
-        if center_on is None and epoint is not None:
-            center_on = Edge.make_circle(r, lb.plane.shift_origin(epoint))
+    if scon:
+        if scon.is_tangent and r is not None:
+            if center_on is None and epoint is not None:
+                center_on = Edge.make_circle(r, lb.plane.shift_origin(epoint))
 
-        if center_on is not None:
-            vt = tangent_center(lb[-1], center_on, r, lb.plane)
-            if vt:
-                trim_last_param, spoint, sdir = vt
+            if center_on is not None:
+                vt = tangent_center(scon.value, center_on, r, lb.plane)
+                if vt:
+                    trim_last_param, spoint, sdir = vt
+        elif not scon.is_tangent and r is not None and ncenter is not None:
+            full_c = Edge.make_circle(abs(r), lb.plane.shift_origin(ncenter))
+            ic = [Vector(it) for it in full_c.intersect(scon.value).vertices()]
+            icn = []
+            for it in ic:
+                itv = Vector(it)
+                itp = param_on_point(full_c, itv)
+                if itp is None:
+                    continue
+                itt = full_c.tangent_at(itp)
+                if r < 0:
+                    itt = -itt
+                if isinstance(scon.value, Axis):
+                    cont = scon.value.direction
+                else:
+                    cont = scon.value.tangent_at(itv)
+                ndot = normal.dot(cont.cross(itt))
+                icn.append((ndot < 0, itv, itt))
+
+            icn.sort()
+            if icn and (len(icn) == 1 or not icn[0][0]):
+                spoint, sdir = icn[0][1], icn[0][2]
 
     result = None
     while True:
+        # print('op_arc:', spoint, sdir, epoint, edir)
+
         # construct actual edges
         if spoint is not None and sdir is not None and epoint is not None:
             result = Edge.make_tangent_arc(spoint, sdir, epoint)
@@ -616,16 +688,32 @@ def op_arc(
             break
 
         # convert params to known constructions and try again
-        if spoint is not None and sdir is not None and r is not None and edir is not None:
+        if (
+            spoint is not None
+            and sdir is not None
+            and r is not None
+            and edir is not None
+            and ncenter is None
+        ):
             ax = make_axis(lb.plane)
             s2c = sdir.rotate(ax, math.copysign(90, r)).normalized()
             c = spoint + s2c * abs(r)
             c2e = edir.rotate(ax, -math.copysign(90, r)).normalized()
             epoint = c + c2e * abs(r)
-        elif sdir is not None and edir is not None and r is not None and ncenter is not None:
+        elif (
+            spoint is None
+            and epoint is None
+            and sdir is not None
+            and edir is not None
+            and r is not None
+            and ncenter is not None
+        ):
             ax = make_axis(lb.plane)
             spoint = ncenter + sdir.normalized() * abs(r)
             sdir = sdir.rotate(ax, math.copysign(90, r))
+            epoint = ncenter + edir.normalized() * abs(r)
+        elif epoint is None and edir is not None and r is not None and ncenter is not None:
+            # print('ep3', ncenter, edir, epoint)
             epoint = ncenter + edir.normalized() * abs(r)
         else:
             break
