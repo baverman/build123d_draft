@@ -13,8 +13,7 @@ from build123d_draft.testing import *
 from build123d_draft.render import ImageExporter
 from build123d_draft import *
 
-CenterArc
-
+ConstrainedArcs
 
 @set_current
 def find_circle():

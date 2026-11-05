@@ -78,6 +78,7 @@ def assert_bb(shape: Shape[Any], min: VectorLike, max: VectorLike) -> None:
 
 
 def test_radius_arc() -> None:
+    from build123d_draft.arc import op_arc
     l = build_line(Plane.XZ).append(op_arc(start=At(None, FREE), end=(30, 0), d=50))
     assert_bb(l.wire(), (0, 0, 0), (30, 0, 5))
 
@@ -89,6 +90,7 @@ def test_radius_arc() -> None:
 
 
 def test_jern_arc() -> None:
+    from build123d_draft.arc import op_arc
     l = build_line(Plane.XZ).append(op_arc(180, r=20))
     assert_bb(l.wire(), (0, 0, 0), (20, 0, 40))
 
@@ -100,6 +102,7 @@ def test_jern_arc() -> None:
 
 
 def test_center_arc() -> None:
+    from build123d_draft.arc import op_arc
     l = build_line(Plane.XZ).append(op_arc(center=X(10), r=10, end=90))
     assert_bb(l.wire(), (10, 0, 0), (20, 0, 10))
 
@@ -122,7 +125,6 @@ def test_trimmed_tangent_arc() -> None:
     assert_bb(l.wire(), (10, 0, 0), (20, 0, 10))
 
 
-@set_current
 def test_trimmed_arc() -> None:
     l = build_line(Plane.XZ).append(op_arc(start=AX, end=90, r=10, center=(10, 8)))
     assert_bb(l.wire(), (10, 0, 0), (20, 0, 18))

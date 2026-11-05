@@ -42,6 +42,7 @@ from .tools import (
     tangent_center,
     RelAxis,
     project_to_axis,
+    intersect_circle,
 )
 
 __all__ = [
@@ -621,7 +622,6 @@ def op_arc(
     else:
         ncenter = lb.to_vector(center) if center is not None else None
 
-    normal = lb.to_vector((0, 0, 1))
     lbt = lb.tangent()
 
     if isinstance(start, (float, int)):
@@ -653,27 +653,9 @@ def op_arc(
                 if vt:
                     trim_last_param, spoint, sdir = vt
         elif not scon.is_tangent and r is not None and ncenter is not None:
-            full_c = Edge.make_circle(abs(r), lb.plane.shift_origin(ncenter))
-            ic = [Vector(it) for it in full_c.intersect(scon.value).vertices()]
-            icn = []
-            for it in ic:
-                itv = Vector(it)
-                itp = param_on_point(full_c, itv)
-                if itp is None:
-                    continue
-                itt = full_c.tangent_at(itp)
-                if r < 0:
-                    itt = -itt
-                if isinstance(scon.value, Axis):
-                    cont = scon.value.direction
-                else:
-                    cont = scon.value.tangent_at(itv)
-                ndot = normal.dot(cont.cross(itt))
-                icn.append((ndot < 0, itv, itt))
-
-            icn.sort()
-            if icn and (len(icn) == 1 or not icn[0][0]):
-                spoint, sdir = icn[0][1], icn[0][2]
+            vi = intersect_circle(lb.plane, ncenter, r, scon.value)
+            if vi is not None:
+                spoint, sdir = vi
 
     result = None
     while True:

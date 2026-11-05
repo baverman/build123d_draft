@@ -496,6 +496,37 @@ def tangent_center(
         return p, tangent.position_at(p), tangent.tangent_at(p)
 
 
+def intersect_circle(
+    plane: Plane, center: Vector, radius: float, other: Axis | Edge
+) -> tuple[Vector, Vector] | None:
+    full_c = Edge.make_circle(abs(radius), plane.shift_origin(center))
+    slist = full_c.intersect(other)
+    if not slist:
+        return None
+    ic = [Vector(it) for it in slist.vertices()]
+    icn = []
+    for it in ic:
+        itv = Vector(it)
+        itp = param_on_point(full_c, itv)
+        if itp is None:
+            continue
+        itt = full_c.tangent_at(itp)
+        if radius < 0:
+            itt = -itt
+        if isinstance(other, Axis):
+            cont = other.direction
+        else:
+            cont = other.tangent_at(itv)
+        ndot = plane.z_dir.dot(cont.cross(itt))
+        icn.append((ndot < 0, itv, itt))
+
+    icn.sort()
+    if icn and (len(icn) == 1 or not icn[0][0]):
+        return icn[0][1], icn[0][2]
+
+    return None
+
+
 def to_vector(plane: Plane, v: Vector | tuple[float, ...], is_dir: bool = False) -> Vector:
     if isinstance(v, tuple):
         return Vector(v).transform(plane.reverse_transform, is_direction=is_dir)
